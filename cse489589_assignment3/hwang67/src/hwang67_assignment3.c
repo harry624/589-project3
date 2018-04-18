@@ -1,6 +1,6 @@
 /**
  * @ubitname_assignment3
- * @author  Fullname <ubitname@buffalo.edu>
+ * @author  hao wang <hwang67@buffalo.edu> yue wan <ywan3@buffalo.edu>
  * @version 1.0
  *
  * @section LICENSE
@@ -21,6 +21,11 @@
  * This contains the main function. Add further description here....
  */
 
+
+ #include "../include/global.h"
+ #include "../include/connection_manager.h"
+
+
 /**
  * main function
  *
@@ -31,6 +36,8 @@
 int main(int argc, char **argv)
 {
 	/*Start Here*/
+  sscanf(argv[1], "%" SCNu16, &CONTROL_PORT);
+  init();
+  return 0;
 
-	return 0;
 }
