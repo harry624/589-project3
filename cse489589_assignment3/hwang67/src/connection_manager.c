@@ -18,22 +18,26 @@
  *
  * @section DESCRIPTION
  *
- * This contains the main function. Add further description here....
+ * Connection Manager listens for incoming connections/messages from the
+ * controller and other routers and calls the desginated handlers.
  */
- #include <stdio.h>
- #include <stdlib.h>
- #include <unistd.h>
- #include <errno.h>
- #include <string.h>
- #include <sys/types.h>
- #include <sys/socket.h>
- #include <netinet/in.h>
- #include <netdb.h>
- #include <arpa/inet.h>
- #include <sys/wait.h>
- #include <signal.h>
 
- #include "../include/global.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <sys/wait.h>
+#include <signal.h>
+
+#include "../include/connection_manager.h"
+#include "../include/global.h"
+#include "../include/control_handler.h"
 
  //init select
  fd_set master;		// master file descriptor list
