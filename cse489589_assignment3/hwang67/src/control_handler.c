@@ -20,14 +20,24 @@
  *
  * Handler for the control plane.
  */
- #include <sys/socket.h>
- #include <netinet/in.h>
- #include <strings.h>
- #include <sys/queue.h>
- #include <unistd.h>
- #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <sys/wait.h>
+#include <signal.h>
+#include <sys/queue.h>
+#include <unistd.h>
 
 #include "../include/global.h"
+#include "../include/author.h"
+
 
 /* Linked List for active control connections */
 struct ControlConn
@@ -38,53 +48,44 @@ struct ControlConn
 
 LIST_HEAD(ControlConnsHead, ControlConn) control_conn_list;
 
+// get sockaddr, IPv4 or IPv6:
+
+void *get_in_addr(struct sockaddr *sa) {
+
+    if (sa->sa_family == AF_INET) { return &(((struct sockaddr_in*)sa)->sin_addr); }
+
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
 
 int create_control_socket(){
     int sock;
-    int status;
-    int new_fd;  // new connection on new_fd
-    struct addrinfo hints, *servinfo, *p;
-    struct sigaction sa;
-    int yes = 1;
-    char s[INET6_ADDRSTRLEN];   //incoming connection ip
+    struct sockaddr_in control_addr;
+    socklen_t addrlen = sizeof(control_addr);
 
-    memset(&hints, 0, sizeof hints); //make sure the struct is empty
-    hints.ai_family = AF_UNSPEC; //don't care IPv4 or IPv6
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE; //fill in my ip for me
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if(sock < 0){
+      perror("server: socket");
 
-    //get address info
-    if ((status = getaddrinfo(NULL, CONTROL_PORT, &hints, &servinfo)) != 0){
-        fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
-        return 1;
     }
-    //loop through all the results and bind to the first we can
-    for(p = servinfo; p != NULL; p = p -> ai_next){
-        if ((sock = socket(p ->ai_family, p -> ai_socktype, p ->ai_protocol)) == -1){
-            perror("server: socket");
-            continue;
-        }
 
-        if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1){
-            perror("setsockopt");
-            exit(1);
-        }
-
-        //bind the port
-        if (bind(sock, p->ai_addr, p->ai_addrlen) == -1){
-            close(sock);
-            perror("server: bind");
-            continue;
-        }
-        break;
-    }
-    freeaddrinfo(servinfo); //add done with this structure
-
-    if(p == NULL) {
-        fprintf(stderr, "server: failed to bind\n" );
+    /* Make socket re-usable */
+    if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0){
+        perror("setsockopt");
         exit(1);
     }
-    if(listen(sock, BACKLOG) == -1){
+
+    bzero(&control_addr, sizeof(control_addr));
+
+    control_addr.sin_family = AF_INET;
+    control_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    control_addr.sin_port = htons(CONTROL_PORT);
+
+    if(bind(sock, (struct sockaddr *)&control_addr, sizeof(control_addr)) < 0){
+        perror("server: bind");
+        exit(1);
+    }
+
+    if(listen(sock, BACKLOG) < 0){
         perror("listen");
         exit(1);
     }
@@ -96,12 +97,12 @@ int create_control_socket(){
 
 
 int new_control_conn(int sock_index){
-     int fdaccpet, sin_size;
+     int fdaccept, sin_size;
      struct sockaddr_storage remoteaddr;  //conntecter's address information;
 
      sin_size = sizeof remoteaddr;
-     new_fd = accept(sock_index, (struct sockaddr *)&remoteaddr, &sin_size);
-     if(new_fd == -1){
+     fdaccept = accept(sock_index, (struct sockaddr *)&remoteaddr, &sin_size);
+     if(fdaccept == -1){
           perror("accept");
      }
 
@@ -122,9 +123,9 @@ void remove_control_connection(int sock_index) {
     close(sock_index);
 }
 
-bool isControl(int sock_index){
+int isControl(int sock_index){
     LIST_FOREACH(connection, &control_conn_list, next)
-        if(connection->sockfd == sock_index) return TRUE;
+        if(connection->sockfd == sock_index) return 1;
 
-    return FALSE;
+    return 0;
 }
