@@ -22,6 +22,7 @@
  */
 
 #include <string.h>
+#include <stdio.h>
 
 #include "../include/global.h"
 #include "../include/control_header_lib.h"

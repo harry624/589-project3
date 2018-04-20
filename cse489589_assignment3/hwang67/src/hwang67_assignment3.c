@@ -20,6 +20,7 @@
  *
  * This contains the main function. Add further description here....
  */
+ #include <stdio.h>
 
 
  #include "../include/global.h"
