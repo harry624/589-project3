@@ -38,6 +38,7 @@
 #include "../include/connection_manager.h"
 #include "../include/global.h"
 #include "../include/control_handler.h"
+#include "../include/control_header_lib.h"
 
  //init select
  fd_set master;		// master file descriptor list
@@ -61,7 +62,7 @@
                  //control socket
                  if(i == control_socket){
                     fdaccpet = new_control_conn(i);
-
+                    printf("new conntection: %d\n", fdaccpet);
                     //add to master fd
                     FD_SET(fdaccpet, &master);
                     if(fdaccpet > fdmax) fdmax = fdaccpet;
@@ -78,7 +79,8 @@
                  //existing socket
                  else{
                       if (isControl(i)){
-
+                          int res = control_recv_hook(i);
+                          if(!res) FD_CLR(i, &master);
                       }
                       else{
                         //unknown socket
@@ -93,6 +95,7 @@
  void init() {
    control_socket = create_control_socket();
 
+   printf("init socket created:%d\n", control_socket);
    //router_socket and data_socket will be initialized after INIT from controller
 
    // clear the master and temp sets

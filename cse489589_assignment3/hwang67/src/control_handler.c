@@ -37,6 +37,14 @@
 
 #include "../include/global.h"
 #include "../include/author.h"
+#include "../include/control_header_lib.h"
+#include "../include/control_response.h"
+#include "../include/network_util.h"
+
+#ifndef PACKET_USING_STRUCT
+    #define CNTRL_CONTROL_CODE_OFFSET 0x04
+    #define CNTRL_PAYLOAD_LEN_OFFSET 0x06
+#endif
 
 
 /* Linked List for active control connections */
@@ -48,15 +56,7 @@ struct ControlConn
 
 LIST_HEAD(ControlConnsHead, ControlConn) control_conn_list;
 
-// get sockaddr, IPv4 or IPv6:
-
-void *get_in_addr(struct sockaddr *sa) {
-
-    if (sa->sa_family == AF_INET) { return &(((struct sockaddr_in*)sa)->sin_addr); }
-
-    return &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
-
+//create socket
 int create_control_socket(){
     int sock;
     struct sockaddr_in control_addr;
@@ -96,6 +96,16 @@ int create_control_socket(){
 }
 
 
+void remove_control_conn(int sock_index)
+{
+    LIST_FOREACH(connection, &control_conn_list, next) {
+        if(connection->sockfd == sock_index) LIST_REMOVE(connection, next); // this may be unsafe?
+        free(connection);
+    }
+
+    close(sock_index);
+}
+
 int new_control_conn(int sock_index){
      int fdaccept, sin_size;
      struct sockaddr_storage remoteaddr;  //conntecter's address information;
@@ -114,18 +124,94 @@ int new_control_conn(int sock_index){
     return fdaccept;
 }
 
-void remove_control_connection(int sock_index) {
-    LIST_FOREACH(connection, &control_conn_list, next) {
-        if(connection->sockfd == sock_index) LIST_REMOVE(connection, next); // this may be unsafe?
-        free(connection);
-    }
-
-    close(sock_index);
-}
-
 int isControl(int sock_index){
     LIST_FOREACH(connection, &control_conn_list, next)
         if(connection->sockfd == sock_index) return 1;
 
     return 0;
+}
+
+int control_recv_hook(int sock_index)
+{
+    char *cntrl_header, *cntrl_payload;
+    uint8_t control_code;
+    uint16_t payload_len;
+
+    /* Get control header */
+    cntrl_header = (char *) malloc(sizeof(char)*CNTRL_HEADER_SIZE);
+    bzero(cntrl_header, CNTRL_HEADER_SIZE);
+
+    if(recvALL(sock_index, cntrl_header, CNTRL_HEADER_SIZE) < 0){
+        remove_control_conn(sock_index);
+        free(cntrl_header);
+        return 0;
+    }
+
+    /* Get control code and payload length from the header */
+    #ifdef PACKET_USING_STRUCT
+        /** ASSERT(sizeof(struct CONTROL_HEADER) == 8)
+          * This is not really necessary with the __packed__ directive supplied during declaration (see control_header_lib.h).
+          * If this fails, comment #define PACKET_USING_STRUCT in control_header_lib.h
+          */
+        BUILD_BUG_ON(sizeof(struct CONTROL_HEADER) != CNTRL_HEADER_SIZE); // This will FAIL during compilation itself; See comment above.
+
+        struct CONTROL_HEADER *header = (struct CONTROL_HEADER *) cntrl_header;
+        control_code = header->control_code;
+        payload_len = ntohs(header->payload_len);
+    #endif
+    #ifndef PACKET_USING_STRUCT
+        memcpy(&control_code, cntrl_header+CNTRL_CONTROL_CODE_OFFSET, sizeof(control_code));
+        memcpy(&payload_len, cntrl_header+CNTRL_PAYLOAD_LEN_OFFSET, sizeof(payload_len));
+        payload_len = ntohs(payload_len);
+    #endif
+
+    free(cntrl_header);
+
+    /* Get control payload */
+    if(payload_len != 0){
+        cntrl_payload = (char *) malloc(sizeof(char)*payload_len);
+        bzero(cntrl_payload, payload_len);
+
+        if(recvALL(sock_index, cntrl_payload, payload_len) < 0){
+            remove_control_conn(sock_index);
+            free(cntrl_payload);
+            return 0;
+        }
+    }
+
+    printf("current payload:%s\n", cntrl_payload);
+
+    /* Triage on control_code */
+    switch(control_code){
+        //AUTHOR [Control Code: 0x00]
+        case 0: author_response(sock_index);
+                break;
+        //INIT [Control Code: 0x01]
+        case 1: init_response(sock_index, cntrl_payload);
+                break;
+        //ROUTING-TABLE [Control Code: 0x02]
+        case 2: routing_table_response(sock_index, cntrl_payload);
+                break;
+        //UPDATE [Control Code: 0x03]
+        case 3: update_response(sock_index, cntrl_payload);
+                break;
+        //CRASH [Control Code: 0x04]
+        case 4: exit(1);
+                break;
+        //SENDFILE [Control Code: 0x05]
+        case 5: sendfile_response(sock_index, cntrl_payload);
+                break;
+        //SENDFILE-STATS [Control Code: 0x06]
+        case 6: sendfile_stats_response(sock_index, cntrl_payload);
+                break;
+        //LAST-DATA-PACKET [Control Code: 0x07]
+        case 7: last_data_packet_response(sock_index, cntrl_payload);
+                break;
+        //PENULTIMATE-DATA-PACKET [Control Code: 0x08]
+        case 8: penultimate_data_packet_response(sock_index, cntrl_payload);
+                break;
+
+    }
+    if(payload_len != 0) free(cntrl_payload);
+    return 1;
 }
