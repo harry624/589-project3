@@ -40,6 +40,7 @@
 #include "../include/control_header_lib.h"
 #include "../include/control_response.h"
 #include "../include/network_util.h"
+// #include "../include/pack_unpack.h"
 
 #ifndef PACKET_USING_STRUCT
     #define CNTRL_CONTROL_CODE_OFFSET 0x04
@@ -54,24 +55,47 @@ struct ControlConn
     LIST_ENTRY(ControlConn) next;
 }*connection, *conn_temp;
 
+struct ROUTER_INIT routers[5];
+
 LIST_HEAD(ControlConnsHead, ControlConn) control_conn_list;
 
-void init_table(char ** cntrl_payload) {
+void init_table(char *cntrl_payload) {
+    uint16_t num_neighbors, update_interval;
+    /* Get control code and payload length from the header */
+    memcpy(&num_neighbors, cntrl_payload, sizeof(num_neighbors));
+    memcpy(&update_interval, cntrl_payload + 0x02, sizeof(update_interval));
 
-    struct ROUTER_INIT *init = (struct ROUTER_INIT *) cntrl_payload;
+    num_neighbors = ntohs(num_neighbors);
+    update_interval = ntohs(update_interval);
 
-    int num_neighbors = init->numberof_router;
-    int updatetime = init->update_interval;
-    int routerId = init->routerID;
-    int port1 = init->port_1;
-    int port2 = init->port_1;
-    int cost = init->cost;
+    printf("number of neighbors:%d size: %d, update_interval: %d, size: %d\n", num_neighbors, sizeof(num_neighbors),update_interval, sizeof(update_interval));
 
+    #ifdef PACKET_USING_STRUCT
+        /** ASSERT(sizeof(struct CONTROL_HEADER) == 8)
+          * This is not really necessary with the __packed__ directive supplied during declaration (see control_header_lib.h).
+          * If this fails, comment #define PACKET_USING_STRUCT in control_header_lib.h
+          */
+        // BUILD_BUG_ON(sizeof(struct ROUTER_INIT) != 512); // This will FAIL during compilation itself; See comment above.
 
-    printf("number of neighbors:%d, updatetime:%d, routerId:%d, port1:%d, port2:%d, cost: %d\n",num_neighbors, updatetime, routerId, port1, port2, cost);
-    for (int i = 0; i < num_neighbors; i++){
+        //save all the routers info in an array
+        for (int i = 0; i < num_neighbors; i++){
+            struct ROUTER_INIT *init = (struct ROUTER_INIT *) (cntrl_payload + 0x04 + i * 0x0c);
+            routers[i].routerID = ntohs(init->routerID);
+            routers[i].routerPort = ntohs(init->routerPort);
+            routers[i].dataPort = ntohs(init->dataPort);
+            routers[i].cost = ntohs(init->cost);
+            routers[i].ipAddress = ntohl(init->ipAddress);
 
-    }
+            printf("routerID:%d, port_1: %d, port_2: %d, cost: %d, ipAddress: %d\n",routers[i].routerID, routers[i].port_1, routers[i].port_2, routers[i].cost, routers[i].ipAddress  );
+        }
+
+    #endif
+    #ifndef PACKET_USING_STRUCT
+
+    #endif
+
+    //create table
+
 }
 
 //create socket
@@ -124,7 +148,7 @@ void remove_control_conn(int sock_index){
 }
 
 int new_control_conn(int sock_index){
-      printf("new_control_conn: %d\n", sock_index);
+    printf("new_control_conn: %d\n", sock_index);
      int fdaccept, sin_size;
      struct sockaddr_storage remoteaddr;  //conntecter's address information;
 
@@ -172,6 +196,7 @@ int control_recv_hook(int sock_index){
           * This is not really necessary with the __packed__ directive supplied during declaration (see control_header_lib.h).
           * If this fails, comment #define PACKET_USING_STRUCT in control_header_lib.h
           */
+
         BUILD_BUG_ON(sizeof(struct CONTROL_HEADER) != CNTRL_HEADER_SIZE); // This will FAIL during compilation itself; See comment above.
         struct CONTROL_HEADER *header = (struct CONTROL_HEADER *) cntrl_header;
         control_code = header->control_code;
@@ -197,6 +222,7 @@ int control_recv_hook(int sock_index){
             free(cntrl_payload);
             return 0;
         }
+
     }
 
     printf("control_code: %d\n", control_code);
@@ -206,36 +232,45 @@ int control_recv_hook(int sock_index){
         //AUTHOR [Control Code: 0x00]
         case 0: author_response(sock_index);
                 break;
+
         //INIT [Control Code: 0x01]
         case 1:
-                init_table(&cntrl_payload);
+                init_table(cntrl_payload);
                 init_response(sock_index);
                 break;
+
         //ROUTING-TABLE [Control Code: 0x02]
         case 2: routing_table_response(sock_index, cntrl_payload);
                 break;
+
         //UPDATE [Control Code: 0x03]
         case 3: update_response(sock_index, cntrl_payload);
                 break;
+
         //CRASH [Control Code: 0x04]
         case 4:
                 crash_response(sock_index);
                 exit(1);
                 break;
+
         //SENDFILE [Control Code: 0x05]
         case 5: sendfile_response(sock_index, cntrl_payload);
                 break;
+
         //SENDFILE-STATS [Control Code: 0x06]
         case 6: sendfile_stats_response(sock_index, cntrl_payload);
                 break;
+
         //LAST-DATA-PACKET [Control Code: 0x07]
         case 7: last_data_packet_response(sock_index, cntrl_payload);
                 break;
+
         //PENULTIMATE-DATA-PACKET [Control Code: 0x08]
         case 8: penultimate_data_packet_response(sock_index, cntrl_payload);
                 break;
 
     }
+
     if(payload_len != 0) free(cntrl_payload);
     return 1;
 }

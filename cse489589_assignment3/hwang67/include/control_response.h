@@ -6,8 +6,7 @@
 #ifdef PACKET_USING_STRUCT
     struct __attribute__((__packed__)) ROUTER_INIT
     {
-        uint16_t numberof_router;
-        uint16_t update_interval;
+
         uint16_t routerID;
         uint16_t port_1;
         uint16_t port_2;
@@ -52,7 +51,6 @@ void sendfile_stats_response(int sock_index, char* cntrl_payload);
 void last_data_packet_response(int sock_index, char* cntrl_payload);
 
 void penultimate_data_packet_response(int sock_index, char* cntrl_payload);
-
 
 
 #endif
