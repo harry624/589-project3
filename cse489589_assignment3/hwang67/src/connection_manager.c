@@ -35,8 +35,8 @@
 #include <sys/wait.h>
 #include <signal.h>
 
-#include "../include/connection_manager.h"
 #include "../include/global.h"
+#include "../include/connection_manager.h"
 #include "../include/control_handler.h"
 #include "../include/control_header_lib.h"
 

@@ -27,6 +27,8 @@
 #include <sys/socket.h>
 #include <stdio.h>
 
+#include "../include/global.h"
+
 ssize_t recvALL(int sock_index, char *buffer, ssize_t nbytes)
 {
     ssize_t bytes = 0;

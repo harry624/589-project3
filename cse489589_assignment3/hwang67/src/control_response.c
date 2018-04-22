@@ -26,46 +26,12 @@
 #include <stdlib.h>
 #include <netinet/in.h>
 
+#include "../include/global.h"
 #include "../include/control_response.h"
 #include "../include/control_header_lib.h"
 #include "../include/network_util.h"
 
-
-void init_response(int sock_index){
-
-  uint16_t payload_len, response_len;
-  char *cntrl_response_header, *cntrl_response_payload, *cntrl_response;
-
-  payload_len = 0; // Discount the NULL chararcter
-  cntrl_response_payload = (char *) malloc(payload_len);
-  memcpy(cntrl_response_payload, "", payload_len);
-
-  cntrl_response_header = create_response_header(sock_index, 1, 1, payload_len);
-
-  response_len = CNTRL_RESP_HEADER_SIZE+payload_len;
-
-  cntrl_response = (char *) malloc(response_len);
-  /* Copy Header */
-  memcpy(cntrl_response, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
-  free(cntrl_response_header);
-  /* Copy Payload */
-  memcpy(cntrl_response+CNTRL_RESP_HEADER_SIZE, cntrl_response_payload, payload_len);
-  free(cntrl_response_payload);
-
-  sendALL(sock_index, cntrl_response, response_len);
-
-  free(cntrl_response);
-
-}
-
-void routing_table_response(int sock_index, char* cntrl_payload){
-
-}
-
-void update_response(int sock_index, char* cntrl_payload){
-
-}
-void crash_response(int sock_index){
+void response(int sock_index, int cntr_code, int res_code) {
     uint16_t payload_len, response_len;
     char *cntrl_response_header, *cntrl_response_payload, *cntrl_response;
 
@@ -73,7 +39,7 @@ void crash_response(int sock_index){
     cntrl_response_payload = (char *) malloc(payload_len);
     memcpy(cntrl_response_payload, "", payload_len);
 
-    cntrl_response_header = create_response_header(sock_index, 4, 4, payload_len);
+    cntrl_response_header = create_response_header(sock_index, cntr_code, res_code,payload_len);
 
     response_len = CNTRL_RESP_HEADER_SIZE+payload_len;
 
@@ -88,11 +54,43 @@ void crash_response(int sock_index){
     sendALL(sock_index, cntrl_response, response_len);
 
     free(cntrl_response);
+}
+
+void init_response(int sock_index){
+    response(sock_index, 1, 1);
+}
+
+void routing_table_response(int sock_index, struct Router routers[]){
+    char *router_buffer;
+    uint16_t router_info_len;
+    router_buffer = (char *) malloc(sizeof(struct ROUTER_TABLE_RESPONSE_HEADER) * 5);
+
+    router_info_len = sizeof(struct ROUTER_TABLE_RESPONSE_HEADER) * 5;
+
+    for (int i = 0; i < 5; i++){
+        struct ROUTER_TABLE_RESPONSE_HEADER *router_info;
+        router_info = (struct ROUTING_UPDATE_ROUTER *) (router_buffer + i * (sizeof(struct ROUTER_TABLE_RESPONSE_HEADER)) );
+        router_info->routerID = routers[i].routerID;
+        // routers_info->padding =
+        routers_info->router_ID = routers[i].routerID;
+        routers_info->cost = routers[i].cost;
+
+    }
+
+    sendALL(sock_index, router_buffer, router_info_len);
 
 }
 
-void sendfile_response(int sock_index, char* cntrl_payload){
+void update_response(int sock_index){
+    response(sock_index, 3, 3);
+}
 
+void crash_response(int sock_index){
+    response(sock_index, 4, 4);
+}
+
+void sendfile_response(int sock_index){
+    response(sock_index, 5, 5);
 }
 
 void sendfile_stats_response(int sock_index, char* cntrl_payload){

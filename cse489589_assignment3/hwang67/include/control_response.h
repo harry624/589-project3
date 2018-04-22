@@ -1,6 +1,9 @@
 #ifndef CONTROL_RESPONSE_H_
 #define CONTROL_RESPONSE_H_
 
+#include "../include/global.h"
+
+
 #define PACKET_USING_STRUCT // Comment this out to use alternate packet crafting technique
 
 #ifdef PACKET_USING_STRUCT
@@ -8,15 +11,16 @@
     {
 
         uint16_t routerID;
-        uint16_t port_1;
-        uint16_t port_2;
+        uint16_t routerPort;
+        uint16_t dataPort;
         uint16_t cost;
         uint32_t ipAddress;
     };
 
-    struct __attribute__((__packed__)) ROUTER_INIT_RESPONSE_HEADER
+    struct __attribute__((__packed__)) ROUTER_TABLE_RESPONSE_HEADER
     {
         uint16_t routerID;
+        uint16_t padding;
         uint16_t nextHopID;
         uint16_t cost;
     };
@@ -38,13 +42,13 @@
 
 void init_response(int sock_index);
 
-void routing_table_response(int sock_index, char* cntrl_payload);
+void routing_table_response(int sock_index, struct Router routers[]);
 
-void update_response(int sock_index, char* cntrl_payload);
+void update_response(int sock_index);
 
 void crash_response(int sock_index);
 
-void sendfile_response(int sock_index, char* cntrl_payload);
+void sendfile_response(int sock_index);
 
 void sendfile_stats_response(int sock_index, char* cntrl_payload);
 

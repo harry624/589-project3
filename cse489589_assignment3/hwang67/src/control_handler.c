@@ -35,19 +35,21 @@
 #include <sys/queue.h>
 #include <unistd.h>
 
-#include "../include/global.h"
 #include "../include/author.h"
+#include "../include/global.h"
+#include "../include/control_handler.h"
 #include "../include/control_header_lib.h"
 #include "../include/control_response.h"
+#include "../include/routing_handler.h"
 #include "../include/network_util.h"
-// #include "../include/pack_unpack.h"
 
 #ifndef PACKET_USING_STRUCT
     #define CNTRL_CONTROL_CODE_OFFSET 0x04
     #define CNTRL_PAYLOAD_LEN_OFFSET 0x06
 #endif
 
-
+int distanceVector[5][5];
+int neighbors[5];
 /* Linked List for active control connections */
 struct ControlConn
 {
@@ -55,11 +57,40 @@ struct ControlConn
     LIST_ENTRY(ControlConn) next;
 }*connection, *conn_temp;
 
-struct ROUTER_INIT routers[5];
+struct Router routers[5];
 
 LIST_HEAD(ControlConnsHead, ControlConn) control_conn_list;
 
+//create UDP socket
+int create_boardcast_UDP(char *IP, int port){
+  struct addrinfo hints, *res;
+  int getIPsockfd;
+  socklen_t addr_len;
+
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_DGRAM;
+
+  char portchar[10];
+  sprintf(portchar, "%d", port);
+
+  getaddrinfo(IP, portchar, &hints, &res);
+
+  //make a socket;
+  if ((getIPsockfd = socket(res -> ai_family, res -> ai_socktype, res -> ai_protocol)) == -1){
+      perror("fail to create socket");
+  }
+  //connect
+  if (connect(getIPsockfd, res -> ai_addr, res -> ai_addrlen) == -1){
+      close(getIPsockfd);
+      perror("fail to connect");
+  }
+
+  return getIPsockfd;
+}
+
 void init_table(char *cntrl_payload) {
+
     uint16_t num_neighbors, update_interval;
     /* Get control code and payload length from the header */
     memcpy(&num_neighbors, cntrl_payload, sizeof(num_neighbors));
@@ -68,7 +99,12 @@ void init_table(char *cntrl_payload) {
     num_neighbors = ntohs(num_neighbors);
     update_interval = ntohs(update_interval);
 
-    printf("number of neighbors:%d size: %d, update_interval: %d, size: %d\n", num_neighbors, sizeof(num_neighbors),update_interval, sizeof(update_interval));
+    printf("number of neighbors: %d, size: %d, update_interval: %d, size: %d\n", num_neighbors, sizeof(num_neighbors),update_interval, sizeof(update_interval));
+
+    //init neighbors array
+    for (int i = 0; i < num_neighbors - 1; i++){
+        neighbors[i] = 0;
+    }
 
     #ifdef PACKET_USING_STRUCT
         /** ASSERT(sizeof(struct CONTROL_HEADER) == 8)
@@ -84,17 +120,65 @@ void init_table(char *cntrl_payload) {
             routers[i].routerPort = ntohs(init->routerPort);
             routers[i].dataPort = ntohs(init->dataPort);
             routers[i].cost = ntohs(init->cost);
-            routers[i].ipAddress = ntohl(init->ipAddress);
 
-            printf("routerID:%d, port_1: %d, port_2: %d, cost: %d, ipAddress: %d\n",routers[i].routerID, routers[i].port_1, routers[i].port_2, routers[i].cost, routers[i].ipAddress  );
+            uint32_t tmpIP = ntohl(init->ipAddress);
+            sprintf(routers[i].ipAddress, "%d.%d.%d.%d", ((tmpIP>>24)&((1<<8)-1)), ((tmpIP>>16)&((1<<8)-1)), ((tmpIP>>8)&((1<<8)-1)), (tmpIP&((1<<8)-1)));
+
+            printf("routerID:%d, port_1: %d, port_2: %d, cost: %d, ipAddress: %s\n",routers[i].routerID, routers[i].routerPort, routers[i].dataPort, routers[i].cost, routers[i].ipAddress);
+
+            if (routers[i].cost == INF){
+
+            }else if (routers[i].cost == 0){
+                localRouterID = routers[i].routerID;
+                //reset timer
+
+            }else{
+                //update neighbors array
+                neighbors[i] = 1;
+                //boardcast the routing updates
+                routers[i].UDPsockfd = create_boardcast_UDP(routers[i].ipAddress, routers[i].routerPort);
+            }
         }
-
-    #endif
-    #ifndef PACKET_USING_STRUCT
-
     #endif
 
     //create table
+    for (int i = 0; i < num_neighbors; i++){
+        for (int j = 0; j < num_neighbors; j++){
+            if (i == localRouterID-1){
+                distanceVector[i][j] = routers[j].cost;
+            }else{
+                distanceVector[i][j] = INF;
+            }
+        }
+    }
+
+    //boardcast the routing updates
+    for (int i = 0; i < num_neighbors && neighbors[i] == 1; i++){
+        update_routing(routers[i].UDPsockfd, neighbors, routers);
+    }
+}
+
+//update router cost
+void updateCost(char *cntrl_payload){
+    uint16_t routerID, cost;
+    /* Get control code and payload length from the header */
+    #ifdef PACKET_USING_STRUCT
+
+        // BUILD_BUG_ON(sizeof(struct CONTROL_HEADER) != CNTRL_HEADER_SIZE); // This will FAIL during compilation itself; See comment above.
+        struct COST_UPDATE *cost_update = (struct COST_UPDATE *) cntrl_payload;
+        routerID = ntohs(cost_update->routerID);
+        cost = ntohs(cost_update->cost);
+    #endif
+
+    //update local table
+    distanceVector[localRouterID-1][routerID-1] = cost;
+
+    //boardcast
+
+}
+
+//receive file
+void receive_file(char *cntrl_payload){
 
 }
 
@@ -226,6 +310,7 @@ int control_recv_hook(int sock_index){
     }
 
     printf("control_code: %d\n", control_code);
+
     /* Triage on control_code */
     switch(control_code){
 
@@ -240,11 +325,13 @@ int control_recv_hook(int sock_index){
                 break;
 
         //ROUTING-TABLE [Control Code: 0x02]
-        case 2: routing_table_response(sock_index, cntrl_payload);
+        case 2: routing_table_response(sock_index, routers);
                 break;
 
         //UPDATE [Control Code: 0x03]
-        case 3: update_response(sock_index, cntrl_payload);
+        case 3:
+                updateCost(cntrl_payload);
+                update_response(sock_index);
                 break;
 
         //CRASH [Control Code: 0x04]
@@ -254,7 +341,9 @@ int control_recv_hook(int sock_index){
                 break;
 
         //SENDFILE [Control Code: 0x05]
-        case 5: sendfile_response(sock_index, cntrl_payload);
+        case 5:
+                receive_file(cntrl_payload);
+                sendfile_response(sock_index);
                 break;
 
         //SENDFILE-STATS [Control Code: 0x06]
