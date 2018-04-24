@@ -38,6 +38,7 @@
 #include "../include/author.h"
 #include "../include/global.h"
 #include "../include/control_handler.h"
+#include "../include/connection_manager.h"
 #include "../include/control_header_lib.h"
 #include "../include/control_response.h"
 #include "../include/routing_handler.h"
@@ -57,129 +58,51 @@ struct ControlConn
     LIST_ENTRY(ControlConn) next;
 }*connection, *conn_temp;
 
-struct Router routers[5];
 
 LIST_HEAD(ControlConnsHead, ControlConn) control_conn_list;
 
 //create UDP socket
-int create_boardcast_UDP(char *IP, int port){
+int create_boardcast_UDP(int router_port){
   struct addrinfo hints, *res;
-  int getIPsockfd;
+  int router_socket;
+  struct sockaddr_in router_addr;
   socklen_t addr_len;
 
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_DGRAM;
 
-  char portchar[10];
-  sprintf(portchar, "%d", port);
-
-  getaddrinfo(IP, portchar, &hints, &res);
+  // char portchar[10];
+  // sprintf(portchar, "%d", router_port);
 
   //make a socket;
-  if ((getIPsockfd = socket(res -> ai_family, res -> ai_socktype, res -> ai_protocol)) == -1){
+  if ((router_socket = socket(AF_INET, SOCK_DGRAM, 0)) == -1){
       perror("fail to create socket");
   }
-  //connect
-  if (connect(getIPsockfd, res -> ai_addr, res -> ai_addrlen) == -1){
-      close(getIPsockfd);
-      perror("fail to connect");
+
+  /* Make socket re-usable */
+  if(setsockopt(router_socket, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0){
+      perror("setsockopt");
+      exit(1);
+  }
+  bzero(&router_addr, sizeof(router_addr));
+
+  router_addr.sin_family = AF_INET;
+  router_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  router_addr.sin_port = router_port;
+
+  if(bind(router_socket, (struct sockaddr *)&router_addr, sizeof(router_addr)) < 0){
+      perror("server: bind");
+      exit(1);
   }
 
-  return getIPsockfd;
-}
+  // if(listen(router_socket, BACKLOG) < 0){
+  //     perror("listen");
+  //     exit(1);
+  // }
 
-void init_table(char *cntrl_payload) {
 
-    uint16_t num_neighbors, update_interval;
-    /* Get control code and payload length from the header */
-    memcpy(&num_neighbors, cntrl_payload, sizeof(num_neighbors));
-    memcpy(&update_interval, cntrl_payload + 0x02, sizeof(update_interval));
-
-    num_neighbors = ntohs(num_neighbors);
-    update_interval = ntohs(update_interval);
-
-    printf("number of neighbors: %d, size: %d, update_interval: %d, size: %d\n", num_neighbors, sizeof(num_neighbors),update_interval, sizeof(update_interval));
-
-    //init neighbors array
-    for (int i = 0; i < num_neighbors - 1; i++){
-        neighbors[i] = 0;
-    }
-
-    #ifdef PACKET_USING_STRUCT
-        /** ASSERT(sizeof(struct CONTROL_HEADER) == 8)
-          * This is not really necessary with the __packed__ directive supplied during declaration (see control_header_lib.h).
-          * If this fails, comment #define PACKET_USING_STRUCT in control_header_lib.h
-          */
-        // BUILD_BUG_ON(sizeof(struct ROUTER_INIT) != 512); // This will FAIL during compilation itself; See comment above.
-
-        //save all the routers info in an array
-        for (int i = 0; i < num_neighbors; i++){
-            struct ROUTER_INIT *init = (struct ROUTER_INIT *) (cntrl_payload + 0x04 + i * 0x0c);
-            routers[i].routerID = ntohs(init->routerID);
-            routers[i].routerPort = ntohs(init->routerPort);
-            routers[i].dataPort = ntohs(init->dataPort);
-            routers[i].cost = ntohs(init->cost);
-
-            uint32_t tmpIP = ntohl(init->ipAddress);
-            sprintf(routers[i].ipAddress, "%d.%d.%d.%d", ((tmpIP>>24)&((1<<8)-1)), ((tmpIP>>16)&((1<<8)-1)), ((tmpIP>>8)&((1<<8)-1)), (tmpIP&((1<<8)-1)));
-
-            printf("routerID:%d, port_1: %d, port_2: %d, cost: %d, ipAddress: %s\n",routers[i].routerID, routers[i].routerPort, routers[i].dataPort, routers[i].cost, routers[i].ipAddress);
-
-            if (routers[i].cost == INF){
-
-            }else if (routers[i].cost == 0){
-                localRouterID = routers[i].routerID;
-                //reset timer
-
-            }else{
-                //update neighbors array
-                neighbors[i] = 1;
-                //boardcast the routing updates
-                routers[i].UDPsockfd = create_boardcast_UDP(routers[i].ipAddress, routers[i].routerPort);
-            }
-        }
-    #endif
-
-    //create table
-    for (int i = 0; i < num_neighbors; i++){
-        for (int j = 0; j < num_neighbors; j++){
-            if (i == localRouterID-1){
-                distanceVector[i][j] = routers[j].cost;
-            }else{
-                distanceVector[i][j] = INF;
-            }
-        }
-    }
-
-    //boardcast the routing updates
-    for (int i = 0; i < num_neighbors && neighbors[i] == 1; i++){
-        update_routing(routers[i].UDPsockfd, neighbors, routers);
-    }
-}
-
-//update router cost
-void updateCost(char *cntrl_payload){
-    uint16_t routerID, cost;
-    /* Get control code and payload length from the header */
-    #ifdef PACKET_USING_STRUCT
-
-        // BUILD_BUG_ON(sizeof(struct CONTROL_HEADER) != CNTRL_HEADER_SIZE); // This will FAIL during compilation itself; See comment above.
-        struct COST_UPDATE *cost_update = (struct COST_UPDATE *) cntrl_payload;
-        routerID = ntohs(cost_update->routerID);
-        cost = ntohs(cost_update->cost);
-    #endif
-
-    //update local table
-    distanceVector[localRouterID-1][routerID-1] = cost;
-
-    //boardcast
-
-}
-
-//receive file
-void receive_file(char *cntrl_payload){
-
+  return router_socket;
 }
 
 //create socket
@@ -193,7 +116,6 @@ int create_control_socket(){
       perror("server: socket");
 
     }
-
     /* Make socket re-usable */
     if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0){
         perror("setsockopt");
@@ -220,6 +142,108 @@ int create_control_socket(){
 
     return sock;
 }
+
+
+void init_table(char *cntrl_payload) {
+
+    uint16_t num_neighbors, update_interval;
+    /* Get control code and payload length from the header */
+    memcpy(&num_neighbors, cntrl_payload, sizeof(num_neighbors));
+    memcpy(&update_interval, cntrl_payload + 0x02, sizeof(update_interval));
+
+    num_neighbors = ntohs(num_neighbors);
+    update_interval = ntohs(update_interval);
+
+    printf("number of neighbors: %d, size: %d, update_interval: %d, size: %d\n", num_neighbors, sizeof(num_neighbors),update_interval, sizeof(update_interval));
+
+    //init neighbors array
+    for (int i = 0; i < num_neighbors - 1; i++){
+        neighbors[i] = 0;
+    }
+
+    #ifdef PACKET_USING_STRUCT
+        // BUILD_BUG_ON(sizeof(struct ROUTER_INIT) != 512); // This will FAIL during compilation itself; See comment above.
+
+        //save all the routers info in an array
+        for (int i = 0; i < num_neighbors; i++){
+            struct ROUTER_INIT *init = (struct ROUTER_INIT *) (cntrl_payload + 0x04 + i * 0x0c);
+            routers[i].routerID = ntohs(init->routerID);
+            routers[i].routerPort = ntohs(init->routerPort);
+            routers[i].dataPort = ntohs(init->dataPort);
+            routers[i].cost = ntohs(init->cost);
+            uint32_t tmpIP = ntohl(init->ipAddress);
+            sprintf(routers[i].ipAddress, "%d.%d.%d.%d", ((tmpIP>>24)&((1<<8)-1)), ((tmpIP>>16)&((1<<8)-1)), ((tmpIP>>8)&((1<<8)-1)), (tmpIP&((1<<8)-1)));
+
+            printf("routerID:%d, port_1: %d, port_2: %d, cost: %d, ipAddress: %s\n",routers[i].routerID, routers[i].routerPort, routers[i].dataPort, routers[i].cost, routers[i].ipAddress);
+
+            routers[i].missedCnt = 0;
+            routers[i].nextHopID = ntohs(init->routerID);
+
+            if (routers[i].cost == INF){
+                routers[i].nextHopID = INF;
+            }else if (routers[i].cost == 0){
+                localRouterID = routers[i].routerID;
+
+                // routers[i].UDPsockfd = router_socket;
+                //reset timer
+
+            }else{
+                //update neighbors array
+                neighbors[i] = 1;
+                //boardcast the routing updates
+                // routers[i].UDPsockfd =
+                //  = routers[i].UDPsockfd;
+            }
+        }
+
+    #endif
+
+
+
+    //create table
+    printf("distance vector:\n");
+    for (int i = 0; i < num_neighbors; i++){
+        for (int j = 0; j < num_neighbors; j++){
+            if (i == localRouterID-1){
+                distanceVector[i][j] = routers[j].cost;
+            }else{
+                distanceVector[i][j] = INF;
+            }
+            printf("%d ", distanceVector[i][j]);
+        }
+        printf("\n");
+    }
+
+    // //boardcast the routing updates
+    // for (int i = 0; i < num_neighbors && neighbors[i] == 1; i++){
+    //     boardcast_update_routing(routers[i].UDPsockfd, neighbors, routers);
+    // }
+}
+
+//update router cost
+void updateCost(char *cntrl_payload){
+    uint16_t routerID, cost;
+    /* Get control code and payload length from the header */
+    #ifdef PACKET_USING_STRUCT
+
+        // BUILD_BUG_ON(sizeof(struct CONTROL_HEADER) != CNTRL_HEADER_SIZE); // This will FAIL during compilation itself; See comment above.
+        struct COST_UPDATE *cost_update = (struct COST_UPDATE *) cntrl_payload;
+        routerID = ntohs(cost_update->routerID);
+        cost = ntohs(cost_update->cost);
+    #endif
+
+    //update local table
+    distanceVector[localRouterID-1][routerID-1] = cost;
+
+    //boardcast
+
+}
+
+//receive file
+void receive_file(char *cntrl_payload){
+
+}
+
 
 void remove_control_conn(int sock_index){
     printf("remove_control_conn:%d\n", sock_index);
@@ -306,7 +330,6 @@ int control_recv_hook(int sock_index){
             free(cntrl_payload);
             return 0;
         }
-
     }
 
     printf("control_code: %d\n", control_code);
@@ -351,11 +374,11 @@ int control_recv_hook(int sock_index){
                 break;
 
         //LAST-DATA-PACKET [Control Code: 0x07]
-        case 7: last_data_packet_response(sock_index, cntrl_payload);
+        case 7: last_data_packet_response(sock_index);
                 break;
 
         //PENULTIMATE-DATA-PACKET [Control Code: 0x08]
-        case 8: penultimate_data_packet_response(sock_index, cntrl_payload);
+        case 8: penultimate_data_packet_response(sock_index);
                 break;
 
     }

@@ -34,7 +34,88 @@
  #include "../include/network_util.h"
  #include "../include/routing_handler.h"
 
- void update_routing(int sockfd, int neighbors[], struct Router routers[]) {
+ int new_routing_conn(int sock_index){
+     printf("new_routing_conn: %d\n", sock_index);
+      int fdaccept, sin_size;
+      struct sockaddr_storage remoteaddr;  //conntecter's address information;
+
+      sin_size = sizeof remoteaddr;
+      fdaccept = accept(sock_index, (struct sockaddr *)&remoteaddr, &sin_size);
+      if(fdaccept == -1){
+           perror("accept");
+      }
+
+     /* Insert into list of active control connections */
+     // connection = malloc(sizeof(struct ControlConn));
+     // connection->sockfd = fdaccept;
+     // LIST_INSERT_HEAD(&control_conn_list, connection, next);
+
+     return fdaccept;
+ }
+
+ void recv_update_distanceVector(int sockfd) {
+   char *routing_header, *routing_payload;
+   uint16_t num_fields;
+   uint32_t sourceIPtmp;
+   char sourceIp[40];
+   int sourceRouterID;
+   /* Get control header */
+   routing_header = (char *) malloc(sizeof(char)*ROUTING_HEADER_SIZE);
+   bzero(routing_header, ROUTING_HEADER_SIZE);
+
+   //receive header
+   if(recvALL(sockfd, routing_header, ROUTING_HEADER_SIZE) < 0){
+       // remove_control_conn(sockfd);
+       free(routing_header);
+       return;
+   }
+
+   /* Get control code and payload length from the header */
+   #ifdef PACKET_USING_STRUCT
+       /** ASSERT(sizeof(struct CONTROL_HEADER) == 8)
+         * This is not really necessary with the __packed__ directive supplied during declaration (see control_header_lib.h).
+         * If this fails, comment #define PACKET_USING_STRUCT in control_header_lib.h
+         */
+
+       BUILD_BUG_ON(sizeof(struct ROUTING_UPDATE_HEADER) != ROUTING_HEADER_SIZE); // This will FAIL during compilation itself; See comment above.
+       struct ROUTING_UPDATE_HEADER *header = (struct ROUTING_UPDATE_HEADER *) routing_header;
+       num_fields = header->num_fields;
+       sourceIPtmp = ntohl(header->sourceIP);
+
+       sprintf(sourceIp, "%d.%d.%d.%d", ((sourceIPtmp>>24)&((1<<8)-1)), ((sourceIPtmp>>16)&((1<<8)-1)), ((sourceIPtmp>>8)&((1<<8)-1)), (sourceIPtmp&((1<<8)-1)));
+
+   #endif
+      free(routing_header);
+
+       for (int i = 0; i < 5; i++){
+          if (strcmp(sourceIp, routers[i].ipAddress) ){
+              sourceRouterID = i + 1;
+           }
+       }
+
+      //receive routers_cost
+      if (num_fields != 0){
+          int router_info_payload = sizeof(struct ROUTING_UPDATE_ROUTER) * num_fields;
+          routing_payload = (char *) malloc(sizeof(char)*router_info_payload);
+
+          int res = recvALL(sockfd, routing_payload, router_info_payload);
+          if(res < 0){
+              // remove_control_conn(sock_index);
+              free(routing_payload);
+              return;
+          }
+
+      }
+
+      //update cost
+      for (int i = 0; i < num_fields; i++){
+          struct ROUTING_UPDATE_ROUTER *router = (struct ROUTING_UPDATE_ROUTER *) (routing_payload + i * 0x0c);
+
+
+      }
+ }
+
+ void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers[]) {
       char *header_buffer;
       char *router_buffer;
       char *buffer;
@@ -49,7 +130,7 @@
       }
       sourceRouterPort = routers[localRouterID - 1].routerPort;
       //cast dot notation to uint32_t
-      inet_pton(AF_INET, routers[localRouterID - 1].ipAddress, sourceIP);
+      inet_pton(AF_INET, routers[localRouterID - 1].ipAddress, &sourceIP);
 
       //header
       uint16_t header_len;
@@ -75,10 +156,12 @@
           struct ROUTING_UPDATE_ROUTER *routers_info;
           routers_info = (struct ROUTING_UPDATE_ROUTER *) (router_buffer + count * (sizeof(struct ROUTING_UPDATE_ROUTER)) );
           //cast dot notation to uint32_t
-          inet_pton(AF_INET, routers[i].ipAddress, routers_info->router_IP);
+          uint32_t tmpIP;
+          inet_pton(AF_INET, routers[i].ipAddress, &tmpIP);
+          routers_info->routerIP = tmpIP;
           routers_info->port = routers[i].routerPort;
-          // routers_info->padding =
-          routers_info->nextHopID = routers[i].nextHopID;
+          routers_info->padding = 0;
+          routers_info->routerID = routers[i].routerID;
           routers_info->cost = routers[i].cost;
 
           count++;

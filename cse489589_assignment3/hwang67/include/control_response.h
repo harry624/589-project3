@@ -17,7 +17,7 @@
         uint32_t ipAddress;
     };
 
-    struct __attribute__((__packed__)) ROUTER_TABLE_RESPONSE_HEADER
+    struct __attribute__((__packed__)) ROUTER_TABLE_RESPONSE
     {
         uint16_t routerID;
         uint16_t padding;
@@ -31,18 +31,12 @@
         uint16_t cost;
     };
 
-    struct __attribute__((__packed__)) SEND_FILE
-    {
-        uint16_t routerID;
-        uint16_t cost;
-    };
-
 #endif
 
 
 void init_response(int sock_index);
 
-void routing_table_response(int sock_index, struct Router routers[]);
+void routing_table_response(int sock_index, struct Router routers[5]);
 
 void update_response(int sock_index);
 
@@ -52,9 +46,9 @@ void sendfile_response(int sock_index);
 
 void sendfile_stats_response(int sock_index, char* cntrl_payload);
 
-void last_data_packet_response(int sock_index, char* cntrl_payload);
+void last_data_packet_response(int sock_index);
 
-void penultimate_data_packet_response(int sock_index, char* cntrl_payload);
+void penultimate_data_packet_response(int sock_index);
 
 
 #endif

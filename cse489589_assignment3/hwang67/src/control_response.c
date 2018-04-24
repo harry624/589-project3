@@ -57,27 +57,55 @@ void response(int sock_index, int cntr_code, int res_code) {
 }
 
 void init_response(int sock_index){
+    printf("init_response\n");
     response(sock_index, 1, 1);
 }
 
-void routing_table_response(int sock_index, struct Router routers[]){
-    char *router_buffer;
-    uint16_t router_info_len;
-    router_buffer = (char *) malloc(sizeof(struct ROUTER_TABLE_RESPONSE_HEADER) * 5);
+void routing_table_response(int sock_index, struct Router routers[5]){
+    printf("routing_table_response\n");
+    //header
+    uint16_t payload_len, response_len;
+    uint16_t router_info_len = sizeof(struct ROUTER_TABLE_RESPONSE);
 
-    router_info_len = sizeof(struct ROUTER_TABLE_RESPONSE_HEADER) * 5;
+    char *cntrl_response_header, *cntrl_response_payload, *cntrl_response;
+
+    payload_len = router_info_len * 5;
+
+    cntrl_response_header = create_response_header(sock_index, 2, 2, payload_len);
+
+    // printf("payload_len: %d\n", payload_len);
+    //response payload
+    cntrl_response_payload = (char *) malloc(payload_len);
 
     for (int i = 0; i < 5; i++){
-        struct ROUTER_TABLE_RESPONSE_HEADER *router_info;
-        router_info = (struct ROUTING_UPDATE_ROUTER *) (router_buffer + i * (sizeof(struct ROUTER_TABLE_RESPONSE_HEADER)) );
-        router_info->routerID = routers[i].routerID;
-        // routers_info->padding =
-        routers_info->router_ID = routers[i].routerID;
-        routers_info->cost = routers[i].cost;
+        struct ROUTER_TABLE_RESPONSE *router_info;
+        router_info = (struct ROUTER_TABLE_RESPONSE *) (cntrl_response_payload + i * router_info_len);
+        // printf("allocate memory\n");
+        router_info->routerID = htons(routers[i].routerID);
+        // printf("id: %d ", router_info->routerID);
+        router_info->padding = htons(0);
+        // printf("padding: %d ", router_info->padding);
+        router_info->nextHopID = htons(routers[i].nextHopID);
+        // printf("nexthop: %d ", router_info->nextHopID);
+        router_info->cost = htons(routers[i].cost);
+        // printf("cost: %d ", router_info->cost);
 
+        printf("routerID:0x%08X, padding: 0x%08X, next_hop: 0x%08X, cost: 0x%08X\n",router_info->routerID, router_info->padding, router_info->nextHopID, router_info->cost);
     }
 
-    sendALL(sock_index, router_buffer, router_info_len);
+    response_len = CNTRL_RESP_HEADER_SIZE + payload_len;
+
+    cntrl_response = (char *) malloc(response_len);
+    /* Copy Header */
+    memcpy(cntrl_response, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
+    free(cntrl_response_header);
+    /* Copy Payload */
+    memcpy(cntrl_response + CNTRL_RESP_HEADER_SIZE, cntrl_response_payload, payload_len);
+    free(cntrl_response_payload);
+
+    sendALL(sock_index, cntrl_response, response_len);
+
+    free(cntrl_response);
 
 }
 
@@ -97,9 +125,9 @@ void sendfile_stats_response(int sock_index, char* cntrl_payload){
 
 }
 
-void last_data_packet_response(int sock_index, char* cntrl_payload){
+void last_data_packet_response(int sock_index){
 
 }
-void penultimate_data_packet_response(int sock_index, char* cntrl_payload){
+void penultimate_data_packet_response(int sock_index){
 
 }
