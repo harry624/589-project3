@@ -23,67 +23,98 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 
- #include "../include/global.h"
- #include "../include/author.h"
- #include "../include/control_header_lib.h"
- #include "../include/control_response.h"
- #include "../include/network_util.h"
- #include "../include/routing_handler.h"
+#include "../include/global.h"
+#include "../include/author.h"
+#include "../include/control_header_lib.h"
+#include "../include/control_response.h"
+#include "../include/network_util.h"
+#include "../include/routing_handler.h"
 
- int new_routing_conn(int sock_index){
-     printf("new_routing_conn: %d\n", sock_index);
-      int fdaccept, sin_size;
-      struct sockaddr_storage remoteaddr;  //conntecter's address information;
+//create UDP socket
+int create_boardcast_UDP_socket(int router_port){
+  int r_sock;
+  struct addrinfo hints, *servinfo, *p;
+  int rv;
 
-      sin_size = sizeof remoteaddr;
-      fdaccept = accept(sock_index, (struct sockaddr *)&remoteaddr, &sin_size);
-      if(fdaccept == -1){
-           perror("accept");
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC; // set to AF_INET to force IPv4
+  hints.ai_socktype = SOCK_DGRAM;
+  hints.ai_flags = AI_PASSIVE; // use my IP
+
+  char port[10];
+  sprintf(port, "%d", router_port);
+
+  if ((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0) {
+      fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+      return 1;
+  }
+
+  // loop through all the results and bind to the first we can
+  for(p = servinfo; p != NULL; p = p->ai_next) {
+      if ((r_sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+          perror("listener: socket"); continue;
       }
+      if (bind(r_sock, p->ai_addr, p->ai_addrlen) == -1) {
+          close(r_sock);
+          perror("listener: bind");
+          continue;
+      }
+      break;
+  }
 
-     /* Insert into list of active control connections */
-     // connection = malloc(sizeof(struct ControlConn));
-     // connection->sockfd = fdaccept;
-     // LIST_INSERT_HEAD(&control_conn_list, connection, next);
+  if (p == NULL) {
+      fprintf(stderr, "listener: failed to bind socket\n");
+      return 2;
+  }
 
-     return fdaccept;
- }
+  freeaddrinfo(servinfo);
+
+  printf("listener: waiting to recvfrom... port: %d\n", router_port);
+
+  return r_sock;
+}
 
  void recv_update_distanceVector(int sockfd) {
+   printf("recv_update_distanceVector\n");
    char *routing_header, *routing_payload;
+   char *routing_update;
    uint16_t num_fields;
    uint32_t sourceIPtmp;
+
    char sourceIp[40];
    int sourceRouterID;
    /* Get control header */
    routing_header = (char *) malloc(sizeof(char)*ROUTING_HEADER_SIZE);
    bzero(routing_header, ROUTING_HEADER_SIZE);
 
-   //receive header
-   if(recvALL(sockfd, routing_header, ROUTING_HEADER_SIZE) < 0){
-       // remove_control_conn(sockfd);
-       free(routing_header);
-       return;
+   routing_payload = (char *) malloc(sizeof(char)*router_info_payload);
+   int router_info_payload = sizeof(struct ROUTING_UPDATE_ROUTER) * 5;
+
+   ssize_t nbytes = ROUTING_HEADER_SIZE + router_info_payload;
+   routing_update = (char *) malloc(sizeof(nbytes);
+   bzero(routing_update, nbytes);
+
+   struct sockaddr_storage their_addr;
+   int addr_len = sizeof(their_addr);
+   if (recvfromALL(sockfd, routing_update, nbytes, (struct sockaddr *)&their_addr, addr_len) < 0){
+     return;
    }
 
    /* Get control code and payload length from the header */
    #ifdef PACKET_USING_STRUCT
-       /** ASSERT(sizeof(struct CONTROL_HEADER) == 8)
-         * This is not really necessary with the __packed__ directive supplied during declaration (see control_header_lib.h).
-         * If this fails, comment #define PACKET_USING_STRUCT in control_header_lib.h
-         */
-
-       BUILD_BUG_ON(sizeof(struct ROUTING_UPDATE_HEADER) != ROUTING_HEADER_SIZE); // This will FAIL during compilation itself; See comment above.
        struct ROUTING_UPDATE_HEADER *header = (struct ROUTING_UPDATE_HEADER *) routing_header;
        num_fields = header->num_fields;
        sourceIPtmp = ntohl(header->sourceIP);
-
        sprintf(sourceIp, "%d.%d.%d.%d", ((sourceIPtmp>>24)&((1<<8)-1)), ((sourceIPtmp>>16)&((1<<8)-1)), ((sourceIPtmp>>8)&((1<<8)-1)), (sourceIPtmp&((1<<8)-1)));
-
    #endif
       free(routing_header);
 
@@ -93,41 +124,34 @@
            }
        }
 
-      //receive routers_cost
-      if (num_fields != 0){
-          int router_info_payload = sizeof(struct ROUTING_UPDATE_ROUTER) * num_fields;
-          routing_payload = (char *) malloc(sizeof(char)*router_info_payload);
 
-          int res = recvALL(sockfd, routing_payload, router_info_payload);
-          if(res < 0){
-              // remove_control_conn(sock_index);
-              free(routing_payload);
-              return;
-          }
+       //udpate routing table
+       for (int i = 0; i < num_fields; i++){
+           struct ROUTING_UPDATE_ROUTER *router_update = (struct ROUTING_UPDATE_ROUTER *) (routing_payload + i * 0x0c);
+           int routerId = router_update->routerID;
+           int cost = router_update->cost;
 
-      }
+           if(routers[routerId].nextHopID == INF){
+               routers[routerId].nextHopID = sourceRouterID;
 
-      //update cost
-      for (int i = 0; i < num_fields; i++){
-          struct ROUTING_UPDATE_ROUTER *router = (struct ROUTING_UPDATE_ROUTER *) (routing_payload + i * 0x0c);
-
-
-      }
+               int newCost = routers[sourceRouterID].cost + cost;
+               if (routers[routerId].cost > newCost){
+                   routers[routerId].cost = newCost;
+                   distanceVector[localRouterID-1][routerId-1] = newCost;
+               }
+           }
+       }
  }
 
  void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers[]) {
-      char *header_buffer;
-      char *router_buffer;
-      char *buffer;
+      printf("boardcast_update_routing\n");
+      char *update_header, *update_payload, *router_update;
 
       uint16_t num_fields, sourceRouterPort;
       uint32_t sourceIP;
 
-      for (int i = 0; i < 5; i++){
-          if (neighbors[i] == 1){
-              num_fields++;
-          }
-      }
+      num_fields = num_neighbors;
+
       sourceRouterPort = routers[localRouterID - 1].routerPort;
       //cast dot notation to uint32_t
       inet_pton(AF_INET, routers[localRouterID - 1].ipAddress, &sourceIP);
@@ -136,8 +160,8 @@
       uint16_t header_len;
       struct ROUTING_UPDATE_HEADER *header;
 
-      header_buffer = (char *) malloc(sizeof(struct ROUTING_UPDATE_HEADER));
-      header = (struct ROUTING_UPDATE_HEADER *) header_buffer;
+      update_header = (char *) malloc(sizeof(struct ROUTING_UPDATE_HEADER));
+      header = (struct ROUTING_UPDATE_HEADER *) update_header;
       /* num_fields */
       header->num_fields = htons(num_fields);
       /* sourceRouterPort */
@@ -149,32 +173,53 @@
 
 
       //router_buffer
-      uint16_t router_info_len;
-      router_buffer = (char *) malloc(sizeof(struct ROUTING_UPDATE_ROUTER) * num_fields);
+      uint16_t update_payload_len;
+      update_payload = (char *) malloc(sizeof(struct ROUTING_UPDATE_ROUTER) * num_fields);
       int count = 0;
-      for (int i = 0; i < 5 && neighbors[i] == 1; i++){
+      for (int i = 0; i < 5; i++){
           struct ROUTING_UPDATE_ROUTER *routers_info;
-          routers_info = (struct ROUTING_UPDATE_ROUTER *) (router_buffer + count * (sizeof(struct ROUTING_UPDATE_ROUTER)) );
+          routers_info = (struct ROUTING_UPDATE_ROUTER *) (update_payload + count * (sizeof(struct ROUTING_UPDATE_ROUTER)) );
           //cast dot notation to uint32_t
           uint32_t tmpIP;
           inet_pton(AF_INET, routers[i].ipAddress, &tmpIP);
-          routers_info->routerIP = tmpIP;
-          routers_info->port = routers[i].routerPort;
-          routers_info->padding = 0;
-          routers_info->routerID = routers[i].routerID;
-          routers_info->cost = routers[i].cost;
+          routers_info->routerIP = htonl(tmpIP);
+          routers_info->port = htons(routers[i].routerPort);
+          routers_info->padding = htons(0);
+          routers_info->routerID = htons(routers[i].routerID);
+          routers_info->cost = htons(routers[i].cost);
 
           count++;
       }
 
-      router_info_len = sizeof(struct ROUTING_UPDATE_ROUTER) * num_fields;
-      //merge two buffer
-      strcpy(buffer, header_buffer);
-      strcat(buffer, router_buffer);
+      update_payload_len = sizeof(struct ROUTING_UPDATE_ROUTER) * num_fields;
 
-      uint16_t total_len = header_len + router_info_len;
+      //merge header and payload
+      uint16_t total_len = header_len + update_payload_len;
+
+      router_update = (char *) malloc(total_len);
+      /* Copy Header */
+      memcpy(router_update, update_header, ROUTING_HEADER_SIZE);
+      free(update_header);
+      /* Copy Payload */
+      memcpy(router_update + ROUTING_HEADER_SIZE, update_payload, update_payload_len);
+      free(update_payload);
 
       //boardcast
-      sendALL(sockfd, buffer, total_len);
+      struct sockaddr_in to;
+      int addr_len = sizeof(to);
+      for (int i = 0; i < 5; i++){
+            if (neighbors[i] == 1){
+                bzero (&to, sizeof(to));
+                to.sin_family = AF_INET;
+                inet_pton(AF_INET, routers[i].ipAddress, &to.sin_addr);
+                to.sin_port   = htons(routers[i].routerPort);
+
+                int res = sendtoALL(sockfd, router_update, total_len, (struct sockaddr *)&to, addr_len);
+                if (res < 0){
+                  return;
+                }
+                printf("send to neighbors: %d, destip: %s, router port: %d, sent:%d\n",i+1, routers[i].ipAddress, routers[i].routerPort, res);
+            }
+      }
 
  }

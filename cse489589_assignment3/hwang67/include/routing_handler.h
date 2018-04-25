@@ -23,6 +23,10 @@ struct __attribute__((__packed__)) ROUTING_UPDATE_ROUTER
 
 int new_routing_conn(int sock_index);
 
+int createUDP_send_socket(char *ip, int router_port);
+
+int create_boardcast_UDP_socket(int router_port);
+
 void recv_update_distanceVector(int sockfd);
 
 void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers[]);

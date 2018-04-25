@@ -49,8 +49,6 @@
     #define CNTRL_PAYLOAD_LEN_OFFSET 0x06
 #endif
 
-int distanceVector[5][5];
-int neighbors[5];
 /* Linked List for active control connections */
 struct ControlConn
 {
@@ -60,50 +58,6 @@ struct ControlConn
 
 
 LIST_HEAD(ControlConnsHead, ControlConn) control_conn_list;
-
-//create UDP socket
-int create_boardcast_UDP(int router_port){
-  struct addrinfo hints, *res;
-  int router_socket;
-  struct sockaddr_in router_addr;
-  socklen_t addr_len;
-
-  memset(&hints, 0, sizeof hints);
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_DGRAM;
-
-  // char portchar[10];
-  // sprintf(portchar, "%d", router_port);
-
-  //make a socket;
-  if ((router_socket = socket(AF_INET, SOCK_DGRAM, 0)) == -1){
-      perror("fail to create socket");
-  }
-
-  /* Make socket re-usable */
-  if(setsockopt(router_socket, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0){
-      perror("setsockopt");
-      exit(1);
-  }
-  bzero(&router_addr, sizeof(router_addr));
-
-  router_addr.sin_family = AF_INET;
-  router_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-  router_addr.sin_port = router_port;
-
-  if(bind(router_socket, (struct sockaddr *)&router_addr, sizeof(router_addr)) < 0){
-      perror("server: bind");
-      exit(1);
-  }
-
-  // if(listen(router_socket, BACKLOG) < 0){
-  //     perror("listen");
-  //     exit(1);
-  // }
-
-
-  return router_socket;
-}
 
 //create socket
 int create_control_socket(){
@@ -146,18 +100,19 @@ int create_control_socket(){
 
 void init_table(char *cntrl_payload) {
 
-    uint16_t num_neighbors, update_interval;
+    uint16_t update_interval;
     /* Get control code and payload length from the header */
     memcpy(&num_neighbors, cntrl_payload, sizeof(num_neighbors));
     memcpy(&update_interval, cntrl_payload + 0x02, sizeof(update_interval));
 
     num_neighbors = ntohs(num_neighbors);
     update_interval = ntohs(update_interval);
+    boardcast_interval = update_interval;
 
     printf("number of neighbors: %d, size: %d, update_interval: %d, size: %d\n", num_neighbors, sizeof(num_neighbors),update_interval, sizeof(update_interval));
 
     //init neighbors array
-    for (int i = 0; i < num_neighbors - 1; i++){
+    for (int i = 0; i < num_neighbors; i++){
         neighbors[i] = 0;
     }
 
@@ -174,7 +129,6 @@ void init_table(char *cntrl_payload) {
             uint32_t tmpIP = ntohl(init->ipAddress);
             sprintf(routers[i].ipAddress, "%d.%d.%d.%d", ((tmpIP>>24)&((1<<8)-1)), ((tmpIP>>16)&((1<<8)-1)), ((tmpIP>>8)&((1<<8)-1)), (tmpIP&((1<<8)-1)));
 
-            printf("routerID:%d, port_1: %d, port_2: %d, cost: %d, ipAddress: %s\n",routers[i].routerID, routers[i].routerPort, routers[i].dataPort, routers[i].cost, routers[i].ipAddress);
 
             routers[i].missedCnt = 0;
             routers[i].nextHopID = ntohs(init->routerID);
@@ -184,21 +138,19 @@ void init_table(char *cntrl_payload) {
             }else if (routers[i].cost == 0){
                 localRouterID = routers[i].routerID;
 
-                // routers[i].UDPsockfd = router_socket;
                 //reset timer
 
             }else{
                 //update neighbors array
                 neighbors[i] = 1;
+                // routers[i].UDPsockfd = createUDP_send_socket(routers[i].ipAddress, routers[i].routerPort);
                 //boardcast the routing updates
-                // routers[i].UDPsockfd =
-                //  = routers[i].UDPsockfd;
             }
+            printf("routerID:%d, port_1: %d, port_2: %d, cost: %d, nexthop: %d, ipAddress: %s\n",routers[i].routerID, routers[i].routerPort, routers[i].dataPort, routers[i].cost, routers[i].nextHopID, routers[i].ipAddress);
+
         }
 
     #endif
-
-
 
     //create table
     printf("distance vector:\n");
@@ -214,10 +166,20 @@ void init_table(char *cntrl_payload) {
         printf("\n");
     }
 
-    // //boardcast the routing updates
-    // for (int i = 0; i < num_neighbors && neighbors[i] == 1; i++){
-    //     boardcast_update_routing(routers[i].UDPsockfd, neighbors, routers);
-    // }
+    //create UDP socket
+    router_socket = create_boardcast_UDP_socket(routers[localRouterID-1].routerPort);
+
+    FD_SET(router_socket, &master);
+    FD_SET(router_socket, &read_fds);
+
+    fdmax = router_socket > fdmax ? router_socket : fdmax;
+
+    printf("router_socket: %d, fdmax: %d, is in the list: %d\n", router_socket, fdmax, FD_ISSET(router_socket, &master));
+    //boardcast the routing updates
+
+    boardcast_update_routing(router_socket, neighbors, routers);
+
+    return;
 }
 
 //update router cost
@@ -233,9 +195,11 @@ void updateCost(char *cntrl_payload){
     #endif
 
     //update local table
+    routers[routerID -1].cost = cost;
     distanceVector[localRouterID-1][routerID-1] = cost;
 
     //boardcast
+    boardcast_update_routing(router_socket, neighbors, routers);
 
 }
 

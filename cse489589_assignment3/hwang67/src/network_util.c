@@ -24,10 +24,37 @@
  */
 
 #include <stdlib.h>
-#include <sys/socket.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 
 #include "../include/global.h"
+
+ssize_t sendtoALL(int sock_index, char *buffer, ssize_t nbytes, struct sockaddr *to, int tolen){
+    ssize_t bytes = 0;
+    bytes = sendto(sock_index, buffer, nbytes, 0, to, tolen);
+
+    while (bytes != nbytes) {
+          bytes += sendto(sock_index, buffer+bytes, nbytes - bytes, 0, to, tolen);
+    }
+    return bytes;
+}
+
+ssize_t recvfromALL(int sock_index, char *buffer, ssize_t nbytes, struct sockaddr *from, int fromlen){
+    ssize_t bytes = 0;
+    bytes = recvfrom(sock_index, buffer, nbytes, 0, from, fromlen);
+
+    if (bytes == 0){
+      return 0;
+    }
+    while (bytes != nbytes) {
+       bytes += recvfrom(sock_index, buffer+bytes, nbytes-bytes, 0, from, fromlen);
+    }
+    return bytes;
+}
 
 ssize_t recvALL(int sock_index, char *buffer, ssize_t nbytes)
 {

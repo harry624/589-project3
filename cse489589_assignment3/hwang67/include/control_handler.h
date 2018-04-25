@@ -8,7 +8,7 @@ struct __attribute__((__packed__)) SEND_FILE
     uint8_t init_TTL;
     uint8_t transferID;
     uint16_t init_seq_num;
-    
+
 };
 
 
