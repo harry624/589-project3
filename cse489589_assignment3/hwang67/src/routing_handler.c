@@ -84,63 +84,67 @@ int create_boardcast_UDP_socket(int router_port){
 }
 
  void recv_update_distanceVector(int sockfd) {
-   printf("recv_update_distanceVector\n");
-   char *routing_header, *routing_payload;
-   char *routing_update;
-   uint16_t num_fields;
-   uint32_t sourceIPtmp;
+       printf("recv_update_distanceVector\n");
+       char *routing_header, *routing_payload;
+       char *routing_update;
+       uint16_t num_fields;
 
-   char sourceIp[40];
-   int sourceRouterID;
-   /* Get control header */
-   routing_header = (char *) malloc(sizeof(char)*ROUTING_HEADER_SIZE);
-   bzero(routing_header, ROUTING_HEADER_SIZE);
+       char sourceIp[40];
+       int sourceRouterID;
+       /* Get control header */
+       routing_header = (char *) malloc(sizeof(char)*ROUTING_HEADER_SIZE);
+       bzero(routing_header, ROUTING_HEADER_SIZE);
 
-   routing_payload = (char *) malloc(sizeof(char)*router_info_payload);
-   int router_info_payload = sizeof(struct ROUTING_UPDATE_ROUTER) * 5;
+       int router_info_payload = sizeof(struct ROUTING_UPDATE_ROUTER) * 5;
 
-   ssize_t nbytes = ROUTING_HEADER_SIZE + router_info_payload;
-   routing_update = (char *) malloc(sizeof(nbytes);
-   bzero(routing_update, nbytes);
+       routing_payload = (char *) malloc(sizeof(char)*router_info_payload);
 
-   struct sockaddr_storage their_addr;
-   int addr_len = sizeof(their_addr);
-   if (recvfromALL(sockfd, routing_update, nbytes, (struct sockaddr *)&their_addr, addr_len) < 0){
-     return;
-   }
+       ssize_t nbytes = ROUTING_HEADER_SIZE + router_info_payload;
+       routing_update = (char *) malloc(nbytes);
+       bzero(routing_update, nbytes);
+
+       int res = recvfromALL(sockfd, routing_update, nbytes);
+
+       if (res < 0){
+          return;
+       }
+       printf("received :%d\n", res);
 
    /* Get control code and payload length from the header */
-   #ifdef PACKET_USING_STRUCT
-       struct ROUTING_UPDATE_HEADER *header = (struct ROUTING_UPDATE_HEADER *) routing_header;
-       num_fields = header->num_fields;
-       sourceIPtmp = ntohl(header->sourceIP);
-       sprintf(sourceIp, "%d.%d.%d.%d", ((sourceIPtmp>>24)&((1<<8)-1)), ((sourceIPtmp>>16)&((1<<8)-1)), ((sourceIPtmp>>8)&((1<<8)-1)), (sourceIPtmp&((1<<8)-1)));
-   #endif
-      free(routing_header);
+       struct ROUTING_UPDATE_HEADER *header = (struct ROUTING_UPDATE_HEADER *) routing_update;
+       num_fields = ntohs(header->num_fields);
+       uint16_t source_router_port = ntohs(header->sourceRouterPort);
+       uint32_t tmpIP = ntohl(header->sourceIP);
+       sprintf(sourceIp, "%d.%d.%d.%d", ((tmpIP>>24)&((1<<8)-1)), ((tmpIP>>16)&((1<<8)-1)), ((tmpIP>>8)&((1<<8)-1)), (tmpIP&((1<<8)-1)));
 
        for (int i = 0; i < 5; i++){
-          if (strcmp(sourceIp, routers[i].ipAddress) ){
+          if (!strcmp(sourceIp, routers[i].ipAddress) ){
               sourceRouterID = i + 1;
            }
        }
+       printf("num_fields: %d, sourceRouter_port: %d, sourceIP: %s, id: %d\n", num_fields, source_router_port, sourceIp, sourceRouterID);
 
 
        //udpate routing table
        for (int i = 0; i < num_fields; i++){
-           struct ROUTING_UPDATE_ROUTER *router_update = (struct ROUTING_UPDATE_ROUTER *) (routing_payload + i * 0x0c);
-           int routerId = router_update->routerID;
-           int cost = router_update->cost;
-
+           struct ROUTING_UPDATE_ROUTER *router_update = (struct ROUTING_UPDATE_ROUTER *) (routing_update + ROUTING_HEADER_SIZE + i * 0x0c);
+           uint16_t routerId = ntohs(router_update->routerID);
+           uint16_t cost = ntohs(router_update->cost);
            if(routers[routerId].nextHopID == INF){
                routers[routerId].nextHopID = sourceRouterID;
+               printf("get update router id :%d\n", routerId);
 
-               int newCost = routers[sourceRouterID].cost + cost;
+               uint16_t newCost = routers[sourceRouterID].cost + cost;
                if (routers[routerId].cost > newCost){
                    routers[routerId].cost = newCost;
                    distanceVector[localRouterID-1][routerId-1] = newCost;
                }
            }
        }
+
+       // boardcast_update_routing(sockfd, neighbors, routers);
+
+       return;
  }
 
  void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers[]) {
@@ -167,7 +171,7 @@ int create_boardcast_UDP_socket(int router_port){
       /* sourceRouterPort */
       header->sourceRouterPort = htons(sourceRouterPort);
       /* sourceIP */
-      header->sourceIP = htonl(sourceIP);
+      header->sourceIP = sourceIP;
 
       header_len = sizeof(struct ROUTING_UPDATE_HEADER);
 
@@ -214,7 +218,7 @@ int create_boardcast_UDP_socket(int router_port){
                 inet_pton(AF_INET, routers[i].ipAddress, &to.sin_addr);
                 to.sin_port   = htons(routers[i].routerPort);
 
-                int res = sendtoALL(sockfd, router_update, total_len, (struct sockaddr *)&to, addr_len);
+                int res = sendtoALL(sockfd, router_update, total_len, to);
                 if (res < 0){
                   return;
                 }

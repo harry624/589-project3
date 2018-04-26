@@ -72,8 +72,9 @@
                  //router socket
                  else if (i == router_socket){
                      printf("handle router_socket: %d\n", i);
-                     recv_update_distanceVector(i);
                      boardcast_update_routing(i, neighbors, routers);
+                     
+                     recv_update_distanceVector(i);
                  }
                  //data socket
                  else if (i == data_socket){
