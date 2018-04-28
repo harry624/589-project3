@@ -21,7 +21,7 @@ struct __attribute__((__packed__)) ROUTING_UPDATE_ROUTER
     uint16_t cost;
 };
 
-int new_routing_conn(int sock_index);
+int create_boardcast_UDP_socket(int router_port);
 
 void recv_update_distanceVector(int sockfd);
 

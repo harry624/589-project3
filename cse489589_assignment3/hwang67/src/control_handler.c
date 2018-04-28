@@ -38,6 +38,7 @@
 #include "../include/author.h"
 #include "../include/global.h"
 #include "../include/control_handler.h"
+#include "../include/data_handler.h"
 #include "../include/connection_manager.h"
 #include "../include/control_header_lib.h"
 #include "../include/control_response.h"
@@ -49,17 +50,24 @@
     #define CNTRL_PAYLOAD_LEN_OFFSET 0x06
 #endif
 
-int distanceVector[5][5];
-int neighbors[5];
+
 /* Linked List for active control connections */
 struct ControlConn
 {
     int sockfd;
     LIST_ENTRY(ControlConn) next;
 }*connection, *conn_temp;
+LIST_HEAD(ControlConnsHead, ControlConn) conn_list;
+
+/* Linked List for active data connections */
+struct DataConn
+{
+  int sockfd;
+  LIST_ENTRY(DataConn) next;
+}*data_connection, *data_conn_temp;
+LIST_HEAD(DataConnsHead, DataConn) data_conn_list;
 
 
-LIST_HEAD(ControlConnsHead, ControlConn) control_conn_list;
 
 //create UDP socket
 int create_boardcast_UDP(int router_port){
@@ -95,12 +103,6 @@ int create_boardcast_UDP(int router_port){
       perror("server: bind");
       exit(1);
   }
-
-  // if(listen(router_socket, BACKLOG) < 0){
-  //     perror("listen");
-  //     exit(1);
-  // }
-
 
   return router_socket;
 }
@@ -138,21 +140,38 @@ int create_control_socket(){
         exit(1);
     }
 
-    LIST_INIT(&control_conn_list);
+    LIST_INIT(&conn_list);
 
     return sock;
 }
 
+//0x01
+void create_router_socket(uint16_t routerPort) {
+    //create UDP socket
+    router_socket = create_boardcast_UDP_socket(routerPort);
+
+    FD_SET(router_socket, &master);
+
+    if(router_socket > fdmax) fdmax = router_socket;
+
+    printf("router_socket: %d, fdmax: %d, is in the list: %d\n", router_socket, fdmax, FD_ISSET(router_socket, &master));
+
+    //boardcast the routing updates
+    int send_router_sock = create_send_UDP_socket();
+    boardcast_update_routing(send_router_sock, neighbors, routers);
+    return;
+}
 
 void init_table(char *cntrl_payload) {
 
-    uint16_t num_neighbors, update_interval;
+    uint16_t update_interval;
     /* Get control code and payload length from the header */
     memcpy(&num_neighbors, cntrl_payload, sizeof(num_neighbors));
     memcpy(&update_interval, cntrl_payload + 0x02, sizeof(update_interval));
 
     num_neighbors = ntohs(num_neighbors);
     update_interval = ntohs(update_interval);
+    boardcast_interval = update_interval;
 
     printf("number of neighbors: %d, size: %d, update_interval: %d, size: %d\n", num_neighbors, sizeof(num_neighbors),update_interval, sizeof(update_interval));
 
@@ -163,7 +182,6 @@ void init_table(char *cntrl_payload) {
 
     #ifdef PACKET_USING_STRUCT
         // BUILD_BUG_ON(sizeof(struct ROUTER_INIT) != 512); // This will FAIL during compilation itself; See comment above.
-
         //save all the routers info in an array
         for (int i = 0; i < num_neighbors; i++){
             struct ROUTER_INIT *init = (struct ROUTER_INIT *) (cntrl_payload + 0x04 + i * 0x0c);
@@ -184,21 +202,12 @@ void init_table(char *cntrl_payload) {
             }else if (routers[i].cost == 0){
                 localRouterID = routers[i].routerID;
 
-                // routers[i].UDPsockfd = router_socket;
-                //reset timer
-
             }else{
                 //update neighbors array
                 neighbors[i] = 1;
-                //boardcast the routing updates
-                // routers[i].UDPsockfd =
-                //  = routers[i].UDPsockfd;
             }
         }
-
     #endif
-
-
 
     //create table
     printf("distance vector:\n");
@@ -214,13 +223,13 @@ void init_table(char *cntrl_payload) {
         printf("\n");
     }
 
-    // //boardcast the routing updates
-    // for (int i = 0; i < num_neighbors && neighbors[i] == 1; i++){
-    //     boardcast_update_routing(routers[i].UDPsockfd, neighbors, routers);
-    // }
+    // create_router_socket(routers[localRouterID-1].routerPort);
+    // create_data_socket(routers[localRouterID-1].dataPort);
+
+    return;
 }
 
-//update router cost
+//0x03 update router cost
 void updateCost(char *cntrl_payload){
     uint16_t routerID, cost;
     /* Get control code and payload length from the header */
@@ -234,7 +243,6 @@ void updateCost(char *cntrl_payload){
 
     //update local table
     distanceVector[localRouterID-1][routerID-1] = cost;
-
     //boardcast
 
 }
@@ -246,7 +254,7 @@ void crash_router(int sock_index){
 	FD_CLR(sock_index, &master);
 }
 
-//receive file
+//0x05 receive file
 void receive_file(char *cntrl_payload){
 
 }
@@ -254,7 +262,7 @@ void receive_file(char *cntrl_payload){
 
 void remove_control_conn(int sock_index){
     printf("remove_control_conn:%d\n", sock_index);
-    LIST_FOREACH(connection, &control_conn_list, next) {
+    LIST_FOREACH(connection, &conn_list, next) {
         if(connection->sockfd == sock_index) LIST_REMOVE(connection, next); // this may be unsafe?
         free(connection);
     }
@@ -276,14 +284,14 @@ int new_control_conn(int sock_index){
     /* Insert into list of active control connections */
     connection = malloc(sizeof(struct ControlConn));
     connection->sockfd = fdaccept;
-    LIST_INSERT_HEAD(&control_conn_list, connection, next);
+    LIST_INSERT_HEAD(&conn_list, connection, next);
 
     return fdaccept;
 }
 
 int isControl(int sock_index){
     // printf("is control: %d\n", sock_index);
-    LIST_FOREACH(connection, &control_conn_list, next)
+    LIST_FOREACH(connection, &conn_list, next)
         if(connection->sockfd == sock_index) return 1;
 
     return 0;
