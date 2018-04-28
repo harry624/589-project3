@@ -23,11 +23,48 @@
  * sent/received.
  */
 
-#include <stdlib.h>
-#include <sys/socket.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+
 
 #include "../include/global.h"
+
+ssize_t sendtoALL(int sock_index, char *buffer, ssize_t nbytes, struct sockaddr_in to){
+
+    socklen_t tolen;
+    tolen = sizeof to;
+    ssize_t bytes = 0;
+    bytes = sendto(sock_index, buffer, nbytes, 0, (struct sockaddr*)&to, tolen);
+
+    while (bytes != nbytes) {
+          bytes += sendto(sock_index, buffer+bytes, nbytes - bytes, 0, (struct sockaddr*)&to, tolen);
+    }
+    return bytes;
+}
+
+ssize_t recvfromALL(int sock_index, char *buffer, ssize_t nbytes){
+    struct sockaddr_storage from;
+    socklen_t fromlen;
+    fromlen = sizeof from;
+    ssize_t bytes = 0;
+    bytes = recvfrom(sock_index, buffer, nbytes, 0, (struct sockaddr *)&from, &fromlen);
+
+    if (bytes == 0){
+      return 0;
+    }
+    while (bytes != nbytes) {
+       bytes += recvfrom(sock_index, buffer+bytes, nbytes-bytes, 0, (struct sockaddr *)&from, &fromlen);
+    }
+    return bytes;
+}
 
 ssize_t recvALL(int sock_index, char *buffer, ssize_t nbytes)
 {
