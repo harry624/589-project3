@@ -239,6 +239,13 @@ void updateCost(char *cntrl_payload){
 
 }
 
+//0x04 crash
+void crash_router(int sock_index){
+
+	close(router_socket);
+	FD_CLR(sock_index, &master);
+}
+
 //receive file
 void receive_file(char *cntrl_payload){
 
@@ -359,6 +366,7 @@ int control_recv_hook(int sock_index){
 
         //CRASH [Control Code: 0x04]
         case 4:
+                crash_router(router_socket);
                 crash_response(sock_index);
                 exit(1);
                 break;

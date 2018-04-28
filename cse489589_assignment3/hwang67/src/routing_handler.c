@@ -34,86 +34,113 @@
  #include "../include/network_util.h"
  #include "../include/routing_handler.h"
 
- int new_routing_conn(int sock_index){
-     printf("new_routing_conn: %d\n", sock_index);
-      int fdaccept, sin_size;
-      struct sockaddr_storage remoteaddr;  //conntecter's address information;
+ //create UDP socket
+ int create_boardcast_UDP_socket(int router_port){
+   int r_sock;
+   struct addrinfo hints, *servinfo, *p;
+   int rv;
 
-      sin_size = sizeof remoteaddr;
-      fdaccept = accept(sock_index, (struct sockaddr *)&remoteaddr, &sin_size);
-      if(fdaccept == -1){
-           perror("accept");
-      }
+   memset(&hints, 0, sizeof hints);
+   hints.ai_family = AF_UNSPEC; // set to AF_INET to force IPv4
+   hints.ai_socktype = SOCK_DGRAM;
+   hints.ai_flags = AI_PASSIVE; // use my IP
 
-     /* Insert into list of active control connections */
-     // connection = malloc(sizeof(struct ControlConn));
-     // connection->sockfd = fdaccept;
-     // LIST_INSERT_HEAD(&control_conn_list, connection, next);
+   char port[10];
+   sprintf(port, "%d", router_port);
 
-     return fdaccept;
+   if ((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0) {
+       fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+       return 1;
+   }
+
+   // loop through all the results and bind to the first we can
+   for(p = servinfo; p != NULL; p = p->ai_next) {
+       if ((r_sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+           perror("listener: socket"); continue;
+       }
+       if (bind(r_sock, p->ai_addr, p->ai_addrlen) == -1) {
+           close(r_sock);
+           perror("listener: bind");
+           continue;
+       }
+       break;
+   }
+
+   if (p == NULL) {
+       fprintf(stderr, "listener: failed to bind socket\n");
+       return 2;
+   }
+
+   freeaddrinfo(servinfo);
+
+   printf("listener: waiting to recvfrom... port: %d\n", router_port);
+
+   return r_sock;
  }
 
  void recv_update_distanceVector(int sockfd) {
-   char *routing_header, *routing_payload;
-   uint16_t num_fields;
-   uint32_t sourceIPtmp;
-   char sourceIp[40];
-   int sourceRouterID;
-   /* Get control header */
-   routing_header = (char *) malloc(sizeof(char)*ROUTING_HEADER_SIZE);
-   bzero(routing_header, ROUTING_HEADER_SIZE);
+        printf("recv_update_distanceVector\n");
+        char *routing_header, *routing_payload;
+        char *routing_update;
+        uint16_t num_fields;
 
-   //receive header
-   if(recvALL(sockfd, routing_header, ROUTING_HEADER_SIZE) < 0){
-       // remove_control_conn(sockfd);
-       free(routing_header);
-       return;
-   }
+        char sourceIp[40];
+        int sourceRouterID;
+        /* Get control header */
+        routing_header = (char *) malloc(sizeof(char)*ROUTING_HEADER_SIZE);
+        bzero(routing_header, ROUTING_HEADER_SIZE);
 
-   /* Get control code and payload length from the header */
-   #ifdef PACKET_USING_STRUCT
-       /** ASSERT(sizeof(struct CONTROL_HEADER) == 8)
-         * This is not really necessary with the __packed__ directive supplied during declaration (see control_header_lib.h).
-         * If this fails, comment #define PACKET_USING_STRUCT in control_header_lib.h
-         */
+        int router_info_payload = sizeof(struct ROUTING_UPDATE_ROUTER) * 5;
 
-       BUILD_BUG_ON(sizeof(struct ROUTING_UPDATE_HEADER) != ROUTING_HEADER_SIZE); // This will FAIL during compilation itself; See comment above.
-       struct ROUTING_UPDATE_HEADER *header = (struct ROUTING_UPDATE_HEADER *) routing_header;
-       num_fields = header->num_fields;
-       sourceIPtmp = ntohl(header->sourceIP);
+        routing_payload = (char *) malloc(sizeof(char)*router_info_payload);
 
-       sprintf(sourceIp, "%d.%d.%d.%d", ((sourceIPtmp>>24)&((1<<8)-1)), ((sourceIPtmp>>16)&((1<<8)-1)), ((sourceIPtmp>>8)&((1<<8)-1)), (sourceIPtmp&((1<<8)-1)));
+        ssize_t nbytes = ROUTING_HEADER_SIZE + router_info_payload;
+        routing_update = (char *) malloc(nbytes);
+        bzero(routing_update, nbytes);
 
-   #endif
-      free(routing_header);
+        int res = recvfromALL(sockfd, routing_update, nbytes);
 
-       for (int i = 0; i < 5; i++){
-          if (strcmp(sourceIp, routers[i].ipAddress) ){
-              sourceRouterID = i + 1;
-           }
-       }
+        if (res < 0){
+           return;
+        }
+        printf("received :%d\n", res);
 
-      //receive routers_cost
-      if (num_fields != 0){
-          int router_info_payload = sizeof(struct ROUTING_UPDATE_ROUTER) * num_fields;
-          routing_payload = (char *) malloc(sizeof(char)*router_info_payload);
+    /* Get control code and payload length from the header */
+        struct ROUTING_UPDATE_HEADER *header = (struct ROUTING_UPDATE_HEADER *) routing_update;
+        num_fields = ntohs(header->num_fields);
+        uint16_t source_router_port = ntohs(header->sourceRouterPort);
+        uint32_t tmpIP = ntohl(header->sourceIP);
+        sprintf(sourceIp, "%d.%d.%d.%d", ((tmpIP>>24)&((1<<8)-1)), ((tmpIP>>16)&((1<<8)-1)), ((tmpIP>>8)&((1<<8)-1)), (tmpIP&((1<<8)-1)));
 
-          int res = recvALL(sockfd, routing_payload, router_info_payload);
-          if(res < 0){
-              // remove_control_conn(sock_index);
-              free(routing_payload);
-              return;
-          }
-
-      }
-
-      //update cost
-      for (int i = 0; i < num_fields; i++){
-          struct ROUTING_UPDATE_ROUTER *router = (struct ROUTING_UPDATE_ROUTER *) (routing_payload + i * 0x0c);
+        for (int i = 0; i < 5; i++){
+           if (!strcmp(sourceIp, routers[i].ipAddress) ){
+               sourceRouterID = i + 1;
+            }
+        }
+        printf("num_fields: %d, sourceRouter_port: %d, sourceIP: %s, id: %d\n", num_fields, source_router_port, sourceIp, sourceRouterID);
 
 
-      }
- }
+        //udpate routing table
+        for (int i = 0; i < num_fields; i++){
+            struct ROUTING_UPDATE_ROUTER *router_update = (struct ROUTING_UPDATE_ROUTER *) (routing_update + ROUTING_HEADER_SIZE + i * 0x0c);
+            uint16_t routerId = ntohs(router_update->routerID);
+            uint16_t cost = ntohs(router_update->cost);
+            if(routers[routerId].nextHopID == INF){
+                routers[routerId].nextHopID = sourceRouterID;
+                printf("get update router id :%d\n", routerId);
+
+                uint16_t newCost = routers[sourceRouterID].cost + cost;
+                if (routers[routerId].cost > newCost){
+                    routers[routerId].cost = newCost;
+                    distanceVector[localRouterID-1][routerId-1] = newCost;
+                }
+            }
+        }
+
+        // boardcast_update_routing(sockfd, neighbors, routers);
+
+        return;
+  }
 
  void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers[]) {
       char *header_buffer;

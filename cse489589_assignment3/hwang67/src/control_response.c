@@ -58,7 +58,7 @@ void response(int sock_index, int cntr_code, int res_code) {
 
 void init_response(int sock_index){
     printf("init_response\n");
-    response(sock_index, 1, 1);
+    response(sock_index, 1, 0);
 }
 
 void routing_table_response(int sock_index, struct Router routers[5]){
@@ -110,15 +110,15 @@ void routing_table_response(int sock_index, struct Router routers[5]){
 }
 
 void update_response(int sock_index){
-    response(sock_index, 3, 3);
+    response(sock_index, 3, 0);
 }
 
 void crash_response(int sock_index){
-    response(sock_index, 4, 4);
+    response(sock_index, 4, 0);
 }
 
 void sendfile_response(int sock_index){
-    response(sock_index, 5, 5);
+    response(sock_index, 5, 0);
 }
 
 void sendfile_stats_response(int sock_index, char* cntrl_payload){
