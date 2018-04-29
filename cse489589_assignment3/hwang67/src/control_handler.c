@@ -72,7 +72,7 @@ LIST_HEAD(DataConnsHead, DataConn) data_conn_list;
 //create UDP socket
 int create_boardcast_UDP(int router_port){
   struct addrinfo hints, *res;
-  int router_socket;
+  int sockfd;
   struct sockaddr_in router_addr;
   socklen_t addr_len;
 
@@ -84,12 +84,12 @@ int create_boardcast_UDP(int router_port){
   // sprintf(portchar, "%d", router_port);
 
   //make a socket;
-  if ((router_socket = socket(AF_INET, SOCK_DGRAM, 0)) == -1){
+  if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1){
       perror("fail to create socket");
   }
 
   /* Make socket re-usable */
-  if(setsockopt(router_socket, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0){
+  if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0){
       perror("setsockopt");
       exit(1);
   }
@@ -99,12 +99,12 @@ int create_boardcast_UDP(int router_port){
   router_addr.sin_addr.s_addr = htonl(INADDR_ANY);
   router_addr.sin_port = router_port;
 
-  if(bind(router_socket, (struct sockaddr *)&router_addr, sizeof(router_addr)) < 0){
+  if(bind(sockfd, (struct sockaddr *)&router_addr, sizeof(router_addr)) < 0){
       perror("server: bind");
       exit(1);
   }
 
-  return router_socket;
+  return sockfd;
 }
 
 //create socket
@@ -249,16 +249,9 @@ void updateCost(char *cntrl_payload){
 
 //0x04 crash
 void crash_router(int sock_index){
-
-	close(router_socket);
-	FD_CLR(sock_index, &master);
+  	close(router_socket);
+  	FD_CLR(sock_index, &master);
 }
-
-//0x05 receive file
-void receive_file(char *cntrl_payload){
-
-}
-
 
 void remove_control_conn(int sock_index){
     printf("remove_control_conn:%d\n", sock_index);
@@ -381,7 +374,7 @@ int control_recv_hook(int sock_index){
 
         //SENDFILE [Control Code: 0x05]
         case 5:
-                receive_file(cntrl_payload);
+                send_file(sock_index, cntrl_payload, payload_len);
                 sendfile_response(sock_index);
                 break;
 

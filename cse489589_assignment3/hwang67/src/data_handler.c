@@ -55,6 +55,51 @@ struct DataConn
  LIST_HEAD(DataConnsHead, DataConn) data_conn_list;
 
 
+//0x05 send file
+void sending_file(char *filename) {
+
+    return;
+}
+
+void findNextHop(char *destIP) {
+    int destationID;
+    for(int i = 0; i < num_neighbors; i++){
+      if (!strcmp(destIP, routers[i].ipAddress)){
+          destationID = i;
+          break;
+      }
+    }
+    
+    return;
+}
+
+void send_file(int sock_index, char * cntrl_payload, uint16_t payload_len){
+    uint32_t tempdestIp;
+    uint8_t init_TTL;
+    uint8_t transferID;
+    uint16_t init_seq_num;
+
+    char filename[40];
+    char destIP[40];
+
+    struct SEND_FILE_CONTROL *send_file = (struct SEND_FILE_CONTROL *) cntrl_payload;
+    tempdestIp = ntohl(send_file->destationIP);
+    sprintf(destIP, "%d.%d.%d.%d", ((tempdestIp>>24)&((1<<8)-1)), ((tempdestIp>>16)&((1<<8)-1)), ((tempdestIp>>8)&((1<<8)-1)), (tempdestIp&((1<<8)-1)));
+
+    init_TTL = ntohs(send_file->init_TTL);
+    transferID = ntohs(send_file->transferID);
+    init_seq_num = ntohs(send_file->init_seq_num);
+
+    //to-do get filename
+
+    findNextHop(destIP);
+
+    sending_file(filename);
+
+    return;
+}
+
+
 int isData(int sock_index){
 	//cout<<"Is Data"<<endl;
 	 LIST_FOREACH(connection, &data_conn_list, next)
