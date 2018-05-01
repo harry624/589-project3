@@ -9,6 +9,13 @@ uint16_t num_neighbors;
 uint16_t boardcast_interval;
 
 
+struct __attribute__((__packed__)) INIT_HEADER
+{
+    uint16_t num_neighbors;
+    uint16_t update_interval;
+
+};
+
 int create_control_socket();
 int new_control_conn(int sock_index);
 

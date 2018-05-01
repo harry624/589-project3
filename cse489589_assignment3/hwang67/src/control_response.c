@@ -137,7 +137,6 @@ void sendfile_stats_response(int sock_index, char* cntrl_payload){
     uint16_t response_len;
     char *cntrl_response_header, *cntrl_response;
     
-
 }
 
 //0x07

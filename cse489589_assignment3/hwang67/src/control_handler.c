@@ -110,11 +110,14 @@ void init_table(char *cntrl_payload) {
 
     uint16_t update_interval;
     /* Get control code and payload length from the header */
-    memcpy(&num_neighbors, cntrl_payload, sizeof(num_neighbors));
-    memcpy(&update_interval, cntrl_payload + 0x02, sizeof(update_interval));
+    // memcpy(&num_neighbors, cntrl_payload, sizeof(num_neighbors));
+    // memcpy(&update_interval, cntrl_payload + 0x02, sizeof(update_interval));
 
-    num_neighbors = ntohs(num_neighbors);
-    update_interval = ntohs(update_interval);
+    struct INIT_HEADER *init = (struct INIT_HEADER *) cntrl_payload;
+
+    num_neighbors = ntohs(init->num_neighbors);
+    update_interval = ntohs(init->update_interval);
+
     boardcast_interval = update_interval;
 
     printf("number of neighbors: %d, size: %d, update_interval: %d, size: %d\n", num_neighbors, sizeof(num_neighbors),update_interval, sizeof(update_interval));
@@ -138,14 +141,15 @@ void init_table(char *cntrl_payload) {
 
             printf("routerID:%d, port_1: %d, port_2: %d, cost: %d, ipAddress: %s\n",routers[i].routerID, routers[i].routerPort, routers[i].dataPort, routers[i].cost, routers[i].ipAddress);
 
-            routers[i].missedCnt = 0;
+            routers[i].missedcnt = 0;
+            routers[i].firstupdateReceived = 0;
             routers[i].nextHopID = ntohs(init->routerID);
+
 
             if (routers[i].cost == INF){
                 routers[i].nextHopID = INF;
             }else if (routers[i].cost == 0){
                 localRouterID = routers[i].routerID;
-
             }else{
                 //update neighbors array
                 neighbors[i] = 1;
@@ -153,19 +157,30 @@ void init_table(char *cntrl_payload) {
         }
     #endif
 
-    //create table
+    //create distance vector
     printf("distance vector:\n");
+    //init
+    for (int i = 0; i < num_neighbors; i++){
+        for (int j = 0; j < num_neighbors; j++){
+            if (i == j){
+              distanceVector[i][j] = 0;
+            }else{
+              distanceVector[i][j] = INF;
+            }
+        }
+    }
+
+    //update cost
     for (int i = 0; i < num_neighbors; i++){
         for (int j = 0; j < num_neighbors; j++){
             if (i == localRouterID-1){
                 distanceVector[i][j] = routers[j].cost;
-            }else{
-                distanceVector[i][j] = INF;
             }
             printf("%d ", distanceVector[i][j]);
         }
         printf("\n");
     }
+
 
     create_router_socket(routers[localRouterID-1].routerPort);
     create_data_socket(routers[localRouterID-1].dataPort);

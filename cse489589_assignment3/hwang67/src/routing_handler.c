@@ -51,61 +51,18 @@ void create_router_socket(uint16_t routerPort) {
      router_socket = create_UDP_listener_socket(routerPort);
 
      FD_SET(router_socket, &master);
+     // FD_SET(router_socket, &read_fds);
 
      if(router_socket > fdmax) fdmax = router_socket;
 
      printf("router_socket: %d, fdmax: %d, is in the list: %d\n", router_socket, fdmax, FD_ISSET(router_socket, &master));
 
-     //boardcast the routing updates
-     // int send_router_sock = create_send_UDP_socket();
-     // boardcast_update_routing(send_router_sock, neighbors, routers);
      return;
 }
 
 
  //create UDP socket
 int create_UDP_listener_socket(int router_port){
-   // int r_sock;
-   // struct addrinfo hints, *servinfo, *p;
-   // int rv;
-   //
-   // memset(&hints, 0, sizeof hints);
-   // hints.ai_family = AF_UNSPEC; // set to AF_INET to force IPv4
-   // hints.ai_socktype = SOCK_DGRAM;
-   // hints.ai_flags = AI_PASSIVE; // use my IP
-   //
-   // char port[10];
-   // sprintf(port, "%d", router_port);
-   //
-   // if ((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0) {
-   //     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-   //     return 1;
-   // }
-   //
-   // // loop through all the results and bind to the first we can
-   // for(p = servinfo; p != NULL; p = p->ai_next) {
-   //     if ((r_sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-   //         perror("listener: socket"); continue;
-   //     }
-   //     if (bind(r_sock, p->ai_addr, p->ai_addrlen) == -1) {
-   //         close(r_sock);
-   //         perror("listener: bind");
-   //         continue;
-   //     }
-   //     break;
-   // }
-   //
-   // if (p == NULL) {
-   //     fprintf(stderr, "listener: failed to bind socket\n");
-   //     return 2;
-   // }
-   //
-   // freeaddrinfo(servinfo);
-   //
-   // printf("listener: waiting to recvfrom... port: %d\n", router_port);
-   //
-   // return r_sock;
-
    struct addrinfo hints, *res;
    int sockfd;
    struct sockaddr_in router_addr;
@@ -132,12 +89,14 @@ int create_UDP_listener_socket(int router_port){
 
    router_addr.sin_family = AF_INET;
    router_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-   router_addr.sin_port = router_port;
+   router_addr.sin_port = htons(router_port);
 
    if(bind(sockfd, (struct sockaddr *)&router_addr, sizeof(router_addr)) < 0){
        perror("server: bind");
        exit(1);
    }
+
+   printf("listener: waiting to recvfrom... port: %d\n", router_port);
 
    return sockfd;
 }
@@ -148,10 +107,21 @@ void updateDVBybellmanFord() {
         for (int j = 0; j < num_neighbors; j++){
             if (distanceVector[localRouterID -1][i] > distanceVector[localRouterID-1][j] + distanceVector[j][i]){
                 distanceVector[localRouterID-1][i] = distanceVector[localRouterID-1][j] + distanceVector[j][i];
-                // routers[i].nextHopID = j+1;
+                routers[i].nextHopID = j+1;
+                routers[i].cost = distanceVector[localRouterID-1][i];
             }
         }
     }
+
+
+    for (int i = 0; i < num_neighbors; i++){
+        for (int j = 0; j < num_neighbors; j++){
+            printf("%d ", distanceVector[i][j]);
+        }
+        printf("\n");
+    }
+
+    return;
 }
 
 void recv_update_distanceVector(int sockfd) {
@@ -174,7 +144,13 @@ void recv_update_distanceVector(int sockfd) {
         routing_update = (char *) malloc(nbytes);
         bzero(routing_update, nbytes);
 
-        int res = recvfromALL(sockfd, routing_update, nbytes);
+        // int res = recvfromALL(sockfd, routing_update, nbytes);
+
+        struct sockaddr_storage from;
+        socklen_t fromlen;
+        fromlen = sizeof from;
+        ssize_t res = 0;
+        res = recvfrom(sockfd, routing_update, nbytes, 0, (struct sockaddr *)&from, &fromlen);
 
         if (res < 0){
            perror("receive broadcast failed");
@@ -193,6 +169,9 @@ void recv_update_distanceVector(int sockfd) {
         for (int i = 0; i < 5; i++){
            if (!strcmp(sourceIp, routers[i].ipAddress) ){
                sourceRouterID = i + 1;
+               routers[i].missedcnt = 0;
+               routers[i].firstupdateReceived = 1;
+               break;
             }
         }
         printf("num_fields: %d, sourceRouter_port: %d, sourceIP: %s, id: %d\n",
@@ -203,24 +182,28 @@ void recv_update_distanceVector(int sockfd) {
             struct ROUTING_UPDATE_ROUTER *router_update = (struct ROUTING_UPDATE_ROUTER *) (routing_update + ROUTING_HEADER_SIZE + i * 0x0c);
             uint16_t routerId = ntohs(router_update->routerID);
             uint16_t cost = ntohs(router_update->cost);
-            if(routers[routerId].nextHopID == INF && cost < INF){
-                routers[routerId].nextHopID = sourceRouterID;
-                printf("get update router id :%d\n", routerId);
 
-                uint16_t newCost = routers[sourceRouterID].cost + cost;
-                if (routers[routerId].cost > newCost){
-                    routers[routerId].cost = newCost;
-                    distanceVector[localRouterID-1][routerId-1] = newCost;
-                    distanceVector[routerID-1][localRouterID-1] = newCost;
-                }
-            }
+            distanceVector[sourceRouterID-1][i] = cost;
+
+            // if(routers[routerId].nextHopID == INF && cost < INF){
+            //     routers[routerId].nextHopID = sourceRouterID;
+            //     printf("get update router id :%d\n", routerId);
+            //
+            //     uint16_t newCost = routers[sourceRouterID].cost + cost;
+            //     if (routers[routerId].cost > newCost){
+            //         routers[routerId].cost = newCost;
+            //         distanceVector[localRouterID-1][routerId-1] = newCost;
+            //         distanceVector[routerId-1][localRouterID-1] = newCost;
+            //     }
+          // }
         }
+        updateDVBybellmanFord();
 
         return;
 }
 
 void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers[]) {
-       printf("boardcast_update_routing\n");
+       // printf("boardcast_update_routing\n");
        char *update_header, *update_payload, *router_update;
 
        uint16_t num_fields, sourceRouterPort;
@@ -294,11 +277,14 @@ void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers
                  to.sin_port   = htons(routers[i].routerPort);
 
                  int res = sendtoALL(sockfd, router_update, total_len, to);
+
+
                  if (res < 0){
+                   perror("send UDP broadcast error");
                    return;
                  }
-                 printf("send to neighbors: %d, destip: %s, router port: %d, sent:%d\n",
-                          i+1, routers[i].ipAddress, routers[i].routerPort, res);
+                 // printf("send to neighbors: %d, destip: %s, router port: %d, sent:%d\n",
+                 //          i+1, routers[i].ipAddress, routers[i].routerPort, res);
              }
        }
 

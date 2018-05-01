@@ -94,8 +94,11 @@ struct DataConn
      data_socket = sock;
 
      FD_SET(data_socket, &master);
+     // FD_SET(data_socket, &read_fds);
 
      if(data_socket > fdmax) fdmax = data_socket;
+
+     printf("data_socket: %d, fdmax: %d, is in the list: %d\n", data_socket, fdmax, FD_ISSET(data_socket, &master));
 
      return;
  }

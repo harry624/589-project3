@@ -21,7 +21,9 @@ struct Router
 
     char ipAddress[40];
     int UDPsockfd;
-    int missedCnt;
+    int firstupdateReceived;
+    int missedcnt;
+    int counter;
 };
 
 struct Router routers[5];
