@@ -21,11 +21,14 @@ struct __attribute__((__packed__)) ROUTING_UPDATE_ROUTER
     uint16_t cost;
 };
 
-int create_boardcast_UDP_socket(int router_port);
+void create_router_socket(uint16_t routerPort);
+
+int create_UDP_listener_socket(int router_port);
 
 void recv_update_distanceVector(int sockfd);
 
 void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers[]);
 
+void updateDVBybellmanFord();
 
 #endif

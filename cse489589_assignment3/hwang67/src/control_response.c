@@ -56,11 +56,13 @@ void response(int sock_index, int cntr_code, int res_code) {
     free(cntrl_response);
 }
 
+//0x01
 void init_response(int sock_index){
     printf("init_response\n");
     response(sock_index, 1, 0);
 }
 
+//0x02
 void routing_table_response(int sock_index, struct Router routers[5]){
     printf("routing_table_response\n");
     //header
@@ -71,7 +73,7 @@ void routing_table_response(int sock_index, struct Router routers[5]){
 
     payload_len = router_info_len * 5;
 
-    cntrl_response_header = create_response_header(sock_index, 2, 2, payload_len);
+    cntrl_response_header = create_response_header(sock_index, 2, 0, payload_len);
 
     // printf("payload_len: %d\n", payload_len);
     //response payload
@@ -109,25 +111,41 @@ void routing_table_response(int sock_index, struct Router routers[5]){
 
 }
 
+//0x03
 void update_response(int sock_index){
     response(sock_index, 3, 0);
 }
 
+//0x04
 void crash_response(int sock_index){
     response(sock_index, 4, 0);
 }
 
+//0x05
 void sendfile_response(int sock_index){
     response(sock_index, 5, 0);
 }
 
+//0x06
 void sendfile_stats_response(int sock_index, char* cntrl_payload){
+    uint8_t transferID;
+    uint8_t ttl;
+    uint16_t padding = htons(0);
+    uint16_t varSeqNum;
+
+    char *response_header;
+    uint16_t response_len;
+    char *cntrl_response_header, *cntrl_response;
+    
 
 }
 
+//0x07
 void last_data_packet_response(int sock_index){
 
 }
+
+//0x08
 void penultimate_data_packet_response(int sock_index){
 
 }

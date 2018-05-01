@@ -60,8 +60,11 @@
              perror("select");
              exit(4);
          }else if (res == 0){
-             // int sock = create_send_UDP_socket();
-             // boardcast_update_routing(sock, neighbors, routers);
+             // if timeout res == 0;
+             
+             int sock = create_send_UDP_socket();
+             boardcast_update_routing(sock, neighbors, routers);
+
          }else{
            // run through the existing connections looking for data to read
            for(int i = 0; i <= fdmax; i++) {
@@ -79,7 +82,7 @@
                    //router socket
                    else if (i == router_socket){
                      // printf("handle router_socket: %d\n", i);
-                     // recv_update_distanceVector(i);
+                     recv_update_distanceVector(i);
                    }
                    //data socket
                    else if (i == data_socket){
@@ -102,7 +105,7 @@
                         }
                         else{
                           //unknown socket
-
+                          perror("known socket");
                         }
                    }
                }

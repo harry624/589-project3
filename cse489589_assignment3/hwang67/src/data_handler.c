@@ -55,6 +55,52 @@ struct DataConn
  LIST_HEAD(DataConnsHead, DataConn) data_conn_list;
 
 
+ void create_data_socket(uint16_t dataPort) {
+     printf("create_data_socket\n");
+     int sock;
+     struct sockaddr_in data_addr;
+     socklen_t addrlen = sizeof(data_addr);
+
+     sock = socket(AF_INET, SOCK_STREAM, 0);
+
+     if(sock < 0){
+       perror("server: socket");
+
+     }
+     /* Make socket re-usable */
+     if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0){
+         perror("setsockopt");
+         exit(1);
+     }
+
+     bzero(&data_addr, sizeof(data_addr));
+
+     data_addr.sin_family = AF_INET;
+     data_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+     data_addr.sin_port = htons(dataPort);
+
+     if(bind(sock, (struct sockaddr *)&data_addr, sizeof(data_addr)) < 0){
+         perror("server: bind");
+         exit(1);
+     }
+
+     if(listen(sock, BACKLOG) < 0){
+         perror("listen");
+         exit(1);
+     }
+
+     LIST_INIT(&data_conn_list);
+
+     data_socket = sock;
+
+     FD_SET(data_socket, &master);
+
+     if(data_socket > fdmax) fdmax = data_socket;
+
+     return;
+ }
+
+
 //0x05 send file
 void sending_file(char *filename) {
 
@@ -69,7 +115,7 @@ void findNextHop(char *destIP) {
           break;
       }
     }
-    
+
     return;
 }
 
@@ -106,50 +152,6 @@ int isData(int sock_index){
 		 if(connection->sockfd == sock_index) return 1;
 	 return 0;
  }
-
-void create_data_socket(uint16_t dataPort) {
-    int sock;
-    struct sockaddr_in control_addr;
-    socklen_t addrlen = sizeof(control_addr);
-
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-
-    if(sock < 0){
-      perror("server: socket");
-
-    }
-    /* Make socket re-usable */
-    if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0){
-        perror("setsockopt");
-        exit(1);
-    }
-
-    bzero(&control_addr, sizeof(control_addr));
-
-    control_addr.sin_family = AF_INET;
-    control_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    control_addr.sin_port = htons(dataPort);
-
-    if(bind(sock, (struct sockaddr *)&control_addr, sizeof(control_addr)) < 0){
-        perror("server: bind");
-        exit(1);
-    }
-
-    if(listen(sock, BACKLOG) < 0){
-        perror("listen");
-        exit(1);
-    }
-
-    LIST_INIT(&data_conn_list);
-
-    data_socket = sock;
-
-    FD_SET(data_socket, &master);
-
-    if(data_socket > fdmax) fdmax = data_socket;
-
-    return;
-}
 
 int new_data_conn(int sock_index)
 {

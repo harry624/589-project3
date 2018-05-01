@@ -67,46 +67,6 @@ struct DataConn
 }*data_connection, *data_conn_temp;
 LIST_HEAD(DataConnsHead, DataConn) data_conn_list;
 
-
-
-//create UDP socket
-int create_boardcast_UDP(int router_port){
-  struct addrinfo hints, *res;
-  int sockfd;
-  struct sockaddr_in router_addr;
-  socklen_t addr_len;
-
-  memset(&hints, 0, sizeof hints);
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_DGRAM;
-
-  // char portchar[10];
-  // sprintf(portchar, "%d", router_port);
-
-  //make a socket;
-  if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1){
-      perror("fail to create socket");
-  }
-
-  /* Make socket re-usable */
-  if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0){
-      perror("setsockopt");
-      exit(1);
-  }
-  bzero(&router_addr, sizeof(router_addr));
-
-  router_addr.sin_family = AF_INET;
-  router_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-  router_addr.sin_port = router_port;
-
-  if(bind(sockfd, (struct sockaddr *)&router_addr, sizeof(router_addr)) < 0){
-      perror("server: bind");
-      exit(1);
-  }
-
-  return sockfd;
-}
-
 //create socket
 int create_control_socket(){
     int sock;
@@ -146,22 +106,6 @@ int create_control_socket(){
 }
 
 //0x01
-void create_router_socket(uint16_t routerPort) {
-    //create UDP socket
-    router_socket = create_boardcast_UDP_socket(routerPort);
-
-    FD_SET(router_socket, &master);
-
-    if(router_socket > fdmax) fdmax = router_socket;
-
-    printf("router_socket: %d, fdmax: %d, is in the list: %d\n", router_socket, fdmax, FD_ISSET(router_socket, &master));
-
-    //boardcast the routing updates
-    int send_router_sock = create_send_UDP_socket();
-    boardcast_update_routing(send_router_sock, neighbors, routers);
-    return;
-}
-
 void init_table(char *cntrl_payload) {
 
     uint16_t update_interval;
@@ -223,13 +167,14 @@ void init_table(char *cntrl_payload) {
         printf("\n");
     }
 
-    // create_router_socket(routers[localRouterID-1].routerPort);
-    // create_data_socket(routers[localRouterID-1].dataPort);
+    create_router_socket(routers[localRouterID-1].routerPort);
+    create_data_socket(routers[localRouterID-1].dataPort);
 
     return;
 }
 
 //0x03 update router cost
+
 void updateCost(char *cntrl_payload){
     uint16_t routerID, cost;
     /* Get control code and payload length from the header */
@@ -244,6 +189,7 @@ void updateCost(char *cntrl_payload){
     //update local table
     distanceVector[localRouterID-1][routerID-1] = cost;
     //boardcast
+    updateDVBybellmanFord();
 
 }
 
@@ -369,7 +315,7 @@ int control_recv_hook(int sock_index){
         case 4:
                 crash_router(router_socket);
                 crash_response(sock_index);
-                exit(1);
+                // exit(1);
                 break;
 
         //SENDFILE [Control Code: 0x05]
