@@ -73,6 +73,11 @@ struct DataConn
          exit(1);
      }
 
+     if(setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (int[]){1}, sizeof(int)) < 0){
+         perror("setsockopt");
+         exit(1);
+     }
+
      bzero(&data_addr, sizeof(data_addr));
 
      data_addr.sin_family = AF_INET;

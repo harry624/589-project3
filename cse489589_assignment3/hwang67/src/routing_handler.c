@@ -86,6 +86,12 @@ int create_UDP_listener_socket(int router_port){
        perror("setsockopt");
        exit(1);
    }
+
+   if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, (int[]){1}, sizeof(int)) < 0){
+       perror("setsockopt");
+       exit(1);
+   }
+
    bzero(&router_addr, sizeof(router_addr));
 
    router_addr.sin_family = AF_INET;
@@ -109,7 +115,6 @@ void updateDVBybellmanFord() {
             if (distanceVector[localRouterID -1][i] > distanceVector[localRouterID-1][j] + distanceVector[j][i]){
                 distanceVector[localRouterID-1][i] = distanceVector[localRouterID-1][j] + distanceVector[j][i];
                 routers[i].nextHopID = j+1;
-                // routers[i].cost = distanceVector[localRouterID-1][i];
                 // neighbors[i] = 1;
             }
         }
@@ -137,7 +142,7 @@ void recv_update_distanceVector(int sockfd) {
         routing_header = (char *) malloc(sizeof(char)*ROUTING_HEADER_SIZE);
         bzero(routing_header, ROUTING_HEADER_SIZE);
 
-        int router_info_payload = sizeof(struct ROUTING_UPDATE_ROUTER) * 5;
+        int router_info_payload = sizeof(struct ROUTING_UPDATE_ROUTER) * num_neighbors;
 
         routing_payload = (char *) malloc(sizeof(char)*router_info_payload);
 
@@ -172,7 +177,7 @@ void recv_update_distanceVector(int sockfd) {
                 ((tmpIP>>24)&((1<<8)-1)), ((tmpIP>>16)&((1<<8)-1)), ((tmpIP>>8)&((1<<8)-1)), (tmpIP&((1<<8)-1)));
 
         //find the source router ID
-        for (int i = 0; i < 5; i++){
+        for (int i = 0; i < num_neighbors; i++){
            if (!strcmp(sourceIp, routers[i].ipAddress) ){
                sourceRouterID = i + 1;
                routers[i].missedcnt = 0;
@@ -189,7 +194,6 @@ void recv_update_distanceVector(int sockfd) {
             uint16_t routerId = ntohs(router_update->routerID);
             uint16_t cost = ntohs(router_update->cost);
 
-            // routers[routerId-1].cost = cost;
 
             distanceVector[sourceRouterID-1][routerId-1] = cost;
         }
@@ -265,7 +269,7 @@ void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers
        struct sockaddr_in to;
        int addr_len = sizeof(to);
        for (int i = 0; i < num_neighbors; i++){
-             if (neighbors[i] == 1 || routers[i].nextHopID != INF){
+             if (neighbors[i] == 1){
                  bzero (&to, sizeof(to));
                  to.sin_family = AF_INET;
                  inet_pton(AF_INET, routers[i].ipAddress, &to.sin_addr);
