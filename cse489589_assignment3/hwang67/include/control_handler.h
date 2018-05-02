@@ -6,6 +6,7 @@ int distanceVector[5][5];
 int neighbors[5];
 int myNeighborHop[5];
 uint16_t num_neighbors;
+uint16_t updated_num_neighbors;
 uint16_t boardcast_interval;
 
 

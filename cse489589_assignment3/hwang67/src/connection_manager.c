@@ -119,12 +119,15 @@
              int count = 0;
              //check if missed count > 3 time period
              for (int i = 0; i < num_neighbors && neighbors[i] == 1; i++){
-                count++;
-                if (routers[i].missedcnt > 3 * boardcast_interval){
+                if (routers[i].missedcnt >= 3 * boardcast_interval){
+                    count++;
                     distanceVector[localRouterID - 1][i] = INF;
                     routers[i].cost = INF;
+                    routers[i].isRemoved = 1;
                 }
              }
+
+             updated_num_neighbors = updated_num_neighbors - count;
 
              updateDVBybellmanFord();
 

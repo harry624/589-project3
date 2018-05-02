@@ -20,10 +20,10 @@ struct Router
     uint16_t nextHopID;
 
     char ipAddress[40];
-    int UDPsockfd;
     int firstupdateReceived;
     int missedcnt;
     int counter;
+    int isRemoved;
 };
 
 struct Router routers[5];

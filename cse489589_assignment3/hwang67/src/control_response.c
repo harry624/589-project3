@@ -27,6 +27,7 @@
 #include <netinet/in.h>
 
 #include "../include/global.h"
+#include "../include/control_handler.h"
 #include "../include/control_response.h"
 #include "../include/control_header_lib.h"
 #include "../include/network_util.h"
@@ -37,13 +38,13 @@ void response(int sock_index, int cntr_code, int res_code) {
 
     payload_len = 0; // Discount the NULL chararcter
     cntrl_response_payload = (char *) malloc(payload_len);
-    memcpy(cntrl_response_payload, "", payload_len);
+    memcpy(cntrl_response_payload, NULL, payload_len);
 
-    cntrl_response_header = create_response_header(sock_index, cntr_code, res_code,payload_len);
+    cntrl_response_header = create_response_header(sock_index, cntr_code, res_code, payload_len);
 
     response_len = CNTRL_RESP_HEADER_SIZE+payload_len;
-
     cntrl_response = (char *) malloc(response_len);
+    
     /* Copy Header */
     memcpy(cntrl_response, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
     free(cntrl_response_header);
@@ -63,7 +64,7 @@ void init_response(int sock_index){
 }
 
 //0x02
-void routing_table_response(int sock_index, struct Router routers[5]){
+void routing_table_response(int sock_index, struct Router routers[num_neighbors]){
     printf("routing_table_response\n");
     //header
     uint16_t payload_len, response_len;
@@ -71,15 +72,14 @@ void routing_table_response(int sock_index, struct Router routers[5]){
 
     char *cntrl_response_header, *cntrl_response_payload, *cntrl_response;
 
-    payload_len = router_info_len * 5;
+    payload_len = router_info_len * num_neighbors;
 
     cntrl_response_header = create_response_header(sock_index, 2, 0, payload_len);
 
-    // printf("payload_len: %d\n", payload_len);
     //response payload
     cntrl_response_payload = (char *) malloc(payload_len);
 
-    for (int i = 0; i < 5; i++){
+    for (int i = 0; i < num_neighbors; i++){
         struct ROUTER_TABLE_RESPONSE *router_info;
         router_info = (struct ROUTER_TABLE_RESPONSE *) (cntrl_response_payload + i * router_info_len);
         // printf("allocate memory\n");
@@ -136,7 +136,6 @@ void sendfile_stats_response(int sock_index, char* cntrl_payload){
     char *response_header;
     uint16_t response_len;
     char *cntrl_response_header, *cntrl_response;
-    
 }
 
 //0x07

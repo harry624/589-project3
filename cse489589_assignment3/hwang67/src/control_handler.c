@@ -106,6 +106,31 @@ int create_control_socket(){
 }
 
 //0x01
+void create_routing_table() {
+    //create distance vector
+    printf("distance vector:\n");
+    //init
+    for (int i = 0; i < num_neighbors; i++){
+        for (int j = 0; j < num_neighbors; j++){
+            if (i == j){
+              distanceVector[i][j] = 0;
+            }else{
+              distanceVector[i][j] = INF;
+            }
+        }
+    }
+    //update cost
+    for (int i = 0; i < num_neighbors; i++){
+        for (int j = 0; j < num_neighbors; j++){
+            if (i == localRouterID-1){
+                distanceVector[i][j] = routers[j].cost;
+            }
+            printf("%d ", distanceVector[i][j]);
+        }
+        printf("\n");
+    }
+}
+
 void init_table(char *cntrl_payload) {
 
     uint16_t update_interval;
@@ -116,6 +141,7 @@ void init_table(char *cntrl_payload) {
     struct INIT_HEADER *init = (struct INIT_HEADER *) cntrl_payload;
 
     num_neighbors = ntohs(init->num_neighbors);
+    updated_num_neighbors = num_neighbors;
     update_interval = ntohs(init->update_interval);
 
     boardcast_interval = update_interval;
@@ -123,7 +149,7 @@ void init_table(char *cntrl_payload) {
     printf("number of neighbors: %d, size: %d, update_interval: %d, size: %d\n", num_neighbors, sizeof(num_neighbors),update_interval, sizeof(update_interval));
 
     //init neighbors array
-    for (int i = 0; i < num_neighbors - 1; i++){
+    for (int i = 0; i < num_neighbors; i++){
         neighbors[i] = 0;
     }
 
@@ -141,10 +167,13 @@ void init_table(char *cntrl_payload) {
 
             printf("routerID:%d, port_1: %d, port_2: %d, cost: %d, ipAddress: %s\n",routers[i].routerID, routers[i].routerPort, routers[i].dataPort, routers[i].cost, routers[i].ipAddress);
 
+            routers[i].isRemoved = 0;
             routers[i].missedcnt = 0;
             routers[i].firstupdateReceived = 0;
             routers[i].nextHopID = ntohs(init->routerID);
 
+            //One of the entries should be to self with a cost of 0 and next hop the router itself.
+            //If the cost of path to a router is INF (infinity), the next hop router ID would also be INF in such a case
 
             if (routers[i].cost == INF){
                 routers[i].nextHopID = INF;
@@ -157,34 +186,10 @@ void init_table(char *cntrl_payload) {
         }
     #endif
 
-    //create distance vector
-    printf("distance vector:\n");
-    //init
-    for (int i = 0; i < num_neighbors; i++){
-        for (int j = 0; j < num_neighbors; j++){
-            if (i == j){
-              distanceVector[i][j] = 0;
-            }else{
-              distanceVector[i][j] = INF;
-            }
-        }
-    }
-
-    //update cost
-    for (int i = 0; i < num_neighbors; i++){
-        for (int j = 0; j < num_neighbors; j++){
-            if (i == localRouterID-1){
-                distanceVector[i][j] = routers[j].cost;
-            }
-            printf("%d ", distanceVector[i][j]);
-        }
-        printf("\n");
-    }
-
-
     create_router_socket(routers[localRouterID-1].routerPort);
     create_data_socket(routers[localRouterID-1].dataPort);
 
+    create_routing_table();
     return;
 }
 

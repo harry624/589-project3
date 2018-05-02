@@ -37,6 +37,7 @@
 
  #include "../include/global.h"
  #include "../include/author.h"
+ #include "../include/control_handler.h"
  #include "../include/control_header_lib.h"
  #include "../include/connection_manager.h"
  #include "../include/control_response.h"
@@ -108,15 +109,15 @@ void updateDVBybellmanFord() {
             if (distanceVector[localRouterID -1][i] > distanceVector[localRouterID-1][j] + distanceVector[j][i]){
                 distanceVector[localRouterID-1][i] = distanceVector[localRouterID-1][j] + distanceVector[j][i];
                 routers[i].nextHopID = j+1;
-                routers[i].cost = distanceVector[localRouterID-1][i];
+                // routers[i].cost = distanceVector[localRouterID-1][i];
+                // neighbors[i] = 1;
             }
         }
     }
 
-
     for (int i = 0; i < num_neighbors; i++){
         for (int j = 0; j < num_neighbors; j++){
-            printf("%d ", distanceVector[i][j]);
+            printf("%d\t", distanceVector[i][j]);
         }
         printf("\n");
     }
@@ -158,6 +159,10 @@ void recv_update_distanceVector(int sockfd) {
         }
         printf("received :%d\n", res);
 
+        if (res < 8){
+          return;
+        }
+
         /* Get control code and payload length from the header */
         struct ROUTING_UPDATE_HEADER *header = (struct ROUTING_UPDATE_HEADER *) routing_update;
         num_fields = ntohs(header->num_fields);
@@ -166,6 +171,7 @@ void recv_update_distanceVector(int sockfd) {
         sprintf(sourceIp, "%d.%d.%d.%d",
                 ((tmpIP>>24)&((1<<8)-1)), ((tmpIP>>16)&((1<<8)-1)), ((tmpIP>>8)&((1<<8)-1)), (tmpIP&((1<<8)-1)));
 
+        //find the source router ID
         for (int i = 0; i < 5; i++){
            if (!strcmp(sourceIp, routers[i].ipAddress) ){
                sourceRouterID = i + 1;
@@ -183,19 +189,9 @@ void recv_update_distanceVector(int sockfd) {
             uint16_t routerId = ntohs(router_update->routerID);
             uint16_t cost = ntohs(router_update->cost);
 
-            distanceVector[sourceRouterID-1][i] = cost;
+            // routers[routerId-1].cost = cost;
 
-            // if(routers[routerId].nextHopID == INF && cost < INF){
-            //     routers[routerId].nextHopID = sourceRouterID;
-            //     printf("get update router id :%d\n", routerId);
-            //
-            //     uint16_t newCost = routers[sourceRouterID].cost + cost;
-            //     if (routers[routerId].cost > newCost){
-            //         routers[routerId].cost = newCost;
-            //         distanceVector[localRouterID-1][routerId-1] = newCost;
-            //         distanceVector[routerId-1][localRouterID-1] = newCost;
-            //     }
-          // }
+            distanceVector[sourceRouterID-1][routerId-1] = cost;
         }
         updateDVBybellmanFord();
 
@@ -209,7 +205,7 @@ void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers
        uint16_t num_fields, sourceRouterPort;
        uint32_t sourceIP;
 
-       num_fields = num_neighbors;
+       num_fields = updated_num_neighbors;
 
        sourceRouterPort = routers[localRouterID - 1].routerPort;
        //cast dot notation to uint32_t
@@ -235,7 +231,7 @@ void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers
        uint16_t update_payload_len;
        update_payload = (char *) malloc(sizeof(struct ROUTING_UPDATE_ROUTER) * num_fields);
 
-       for (int i = 0; i < num_fields; i++){
+       for (int i = 0; i < num_fields && routers[i].isRemoved == 0; i++){
            struct ROUTING_UPDATE_ROUTER *routers_info;
            routers_info = (struct ROUTING_UPDATE_ROUTER *) (update_payload + i * (sizeof(struct ROUTING_UPDATE_ROUTER)) );
            //cast dot notation to uint32_t
@@ -245,8 +241,7 @@ void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers
            routers_info->port = htons(routers[i].routerPort);
            routers_info->padding = htons(0);
            routers_info->routerID = htons(routers[i].routerID);
-           routers_info->cost = htons(routers[i].cost);
-
+           routers_info->cost = htons(distanceVector[localRouterID-1][i]);
        }
 
        // printf("payload created\n");
@@ -269,15 +264,14 @@ void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers
        //boardcast
        struct sockaddr_in to;
        int addr_len = sizeof(to);
-       for (int i = 0; i < 5; i++){
-             if (neighbors[i] == 1){
+       for (int i = 0; i < num_neighbors; i++){
+             if (neighbors[i] == 1 || routers[i].nextHopID != INF){
                  bzero (&to, sizeof(to));
                  to.sin_family = AF_INET;
                  inet_pton(AF_INET, routers[i].ipAddress, &to.sin_addr);
                  to.sin_port   = htons(routers[i].routerPort);
 
                  int res = sendtoALL(sockfd, router_update, total_len, to);
-
 
                  if (res < 0){
                    perror("send UDP broadcast error");
