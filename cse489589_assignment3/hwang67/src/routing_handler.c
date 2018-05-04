@@ -48,22 +48,21 @@
 void create_router_socket(uint16_t routerPort) {
     printf("create_router_socket\n");
 
-     //create UDP socket
+     // create UDP socket
      router_socket = create_UDP_listener_socket(routerPort);
 
      FD_SET(router_socket, &master);
-     // FD_SET(router_socket, &read_fds);
 
      if(router_socket > fdmax) fdmax = router_socket;
 
      printf("router_socket: %d, fdmax: %d, is in the list: %d\n", router_socket, fdmax, FD_ISSET(router_socket, &master));
 
-     return;
+    return;
 }
 
 
  //create UDP socket
-int create_UDP_listener_socket(int router_port){
+int create_UDP_listener_socket(uint16_t router_port){
    struct addrinfo hints, *res;
    int sockfd;
    struct sockaddr_in router_addr;
@@ -73,14 +72,10 @@ int create_UDP_listener_socket(int router_port){
    hints.ai_family = AF_UNSPEC;
    hints.ai_socktype = SOCK_DGRAM;
 
-   // char portchar[10];
-   // sprintf(portchar, "%d", router_port);
-
-   //make a socket;
+   // make a socket;
    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1){
        perror("fail to create socket");
    }
-
    /* Make socket re-usable */
    if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0){
        perror("setsockopt");
@@ -112,9 +107,9 @@ int create_UDP_listener_socket(int router_port){
 void updateDVBybellmanFord() {
     for (int i = 0; i < num_neighbors; i++){
         for (int j = 0; j < num_neighbors; j++){
-            if (distanceVector[localRouterID -1][i] > distanceVector[localRouterID-1][j] + distanceVector[j][i]){
-                distanceVector[localRouterID-1][i] = distanceVector[localRouterID-1][j] + distanceVector[j][i];
-                routers[i].nextHopID = j+1;
+            if (distanceVector[localRouterIndex][i] > distanceVector[localRouterIndex][j] + distanceVector[j][i]){
+                distanceVector[localRouterIndex][i] = distanceVector[localRouterIndex][j] + distanceVector[j][i];
+                routers[i].nextHopID = routers[j].routerID;
                 // neighbors[i] = 1;
             }
         }
@@ -211,9 +206,9 @@ void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers
 
        num_fields = updated_num_neighbors;
 
-       sourceRouterPort = routers[localRouterID - 1].routerPort;
+       sourceRouterPort = routers[localRouterIndex].routerPort;
        //cast dot notation to uint32_t
-       inet_pton(AF_INET, routers[localRouterID - 1].ipAddress, &sourceIP);
+       inet_pton(AF_INET, routers[localRouterIndex].ipAddress, &sourceIP);
 
        //header
        uint16_t header_len;
@@ -245,7 +240,7 @@ void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers
            routers_info->port = htons(routers[i].routerPort);
            routers_info->padding = htons(0);
            routers_info->routerID = htons(routers[i].routerID);
-           routers_info->cost = htons(distanceVector[localRouterID-1][i]);
+           routers_info->cost = htons(distanceVector[localRouterIndex][i]);
        }
 
        // printf("payload created\n");

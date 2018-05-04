@@ -83,7 +83,6 @@ int create_control_socket(){
         perror("setsockopt");
         exit(1);
     }
-
     if(setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (int[]){1}, sizeof(int)) < 0){
         perror("setsockopt");
         exit(1);
@@ -127,7 +126,7 @@ void create_routing_table() {
     //update cost
     for (int i = 0; i < num_neighbors; i++){
         for (int j = 0; j < num_neighbors; j++){
-            if (i == localRouterID-1){
+            if (i == localRouterIndex){
                 distanceVector[i][j] = routers[j].cost;
             }
             printf("%d ", distanceVector[i][j]);
@@ -151,7 +150,7 @@ void init_table(char *cntrl_payload) {
 
     boardcast_interval = update_interval;
 
-    printf("number of neighbors: %d, size: %d, update_interval: %d, size: %d\n", num_neighbors, sizeof(num_neighbors),update_interval, sizeof(update_interval));
+    // printf("number of neighbors: %d, size: %d, update_interval: %d, size: %d\n", num_neighbors, sizeof(num_neighbors),update_interval, sizeof(update_interval));
 
     //init neighbors array
     for (int i = 0; i < num_neighbors; i++){
@@ -170,13 +169,14 @@ void init_table(char *cntrl_payload) {
             uint32_t tmpIP = ntohl(init->ipAddress);
             sprintf(routers[i].ipAddress, "%d.%d.%d.%d", ((tmpIP>>24)&((1<<8)-1)), ((tmpIP>>16)&((1<<8)-1)), ((tmpIP>>8)&((1<<8)-1)), (tmpIP&((1<<8)-1)));
 
-            printf("routerID:%d, port_1: %d, port_2: %d, cost: %d, ipAddress: %s\n",routers[i].routerID, routers[i].routerPort, routers[i].dataPort, routers[i].cost, routers[i].ipAddress);
+            // printf("routerID:%d, port_1: %d, port_2: %d, cost: %d, ipAddress: %s\n",routers[i].routerID, routers[i].routerPort, routers[i].dataPort, routers[i].cost, routers[i].ipAddress);
 
             routers[i].isRemoved = 0;
             routers[i].missedcnt = 0;
             routers[i].firstupdateReceived = 0;
             routers[i].nextHopID = ntohs(init->routerID);
 
+            routers[i].rTable_index = i;
             //One of the entries should be to self with a cost of 0 and next hop the router itself.
             //If the cost of path to a router is INF (infinity), the next hop router ID would also be INF in such a case
 
@@ -184,6 +184,7 @@ void init_table(char *cntrl_payload) {
                 routers[i].nextHopID = INF;
             }else if (routers[i].cost == 0){
                 localRouterID = routers[i].routerID;
+                localRouterIndex = i;
             }else{
                 //update neighbors array
                 neighbors[i] = 1;
@@ -191,10 +192,13 @@ void init_table(char *cntrl_payload) {
         }
     #endif
 
-    create_router_socket(routers[localRouterID-1].routerPort);
-    create_data_socket(routers[localRouterID-1].dataPort);
 
     create_routing_table();
+
+    // printf("router port:%d\n", routers[localRouterIndex].routerPort);
+    create_router_socket(routers[localRouterIndex].routerPort);
+    create_data_socket(routers[localRouterIndex].routerPort);
+    //
     return;
 }
 
@@ -211,8 +215,14 @@ void updateCost(char *cntrl_payload){
         cost = ntohs(cost_update->cost);
     #endif
 
+    int rtable_index = 0;
+    for (int i = 0; i < num_neighbors; i++){
+        if (routers[i].routerID == routerID){
+              rtable_index = i;
+        }
+    }
     //update local table
-    distanceVector[localRouterID-1][routerID-1] = cost;
+    distanceVector[localRouterIndex][rtable_index] = cost;
     //boardcast
     updateDVBybellmanFord();
 
@@ -322,8 +332,8 @@ int control_recv_hook(int sock_index){
 
         //INIT [Control Code: 0x01]
         case 1:
-                init_table(cntrl_payload);
                 init_response(sock_index);
+                init_table(cntrl_payload);
                 break;
 
         //ROUTING-TABLE [Control Code: 0x02]
@@ -338,9 +348,9 @@ int control_recv_hook(int sock_index){
 
         //CRASH [Control Code: 0x04]
         case 4:
-                crash_router(router_socket);
                 crash_response(sock_index);
-                // exit(1);
+                crash_router(router_socket);
+                exit(1);
                 break;
 
         //SENDFILE [Control Code: 0x05]

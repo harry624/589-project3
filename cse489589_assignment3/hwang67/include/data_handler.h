@@ -1,6 +1,18 @@
 #ifndef DATA_HANDLER_H_
 #define DATA_HANDLER_H_
 
+#define DATA_PACKET_HEADER_SIZE 12
+
+struct __attribute__((__packed__)) DATA_PACKET_HEADER
+{
+    uint32_t destationIP;
+    uint8_t transferID;
+    uint8_t TTL;
+    uint16_t seq_num;
+    uint16_t FIN;
+    uint16_t padding;
+};
+
 
 struct __attribute__((__packed__)) SEND_FILE_CONTROL
 {
@@ -8,7 +20,6 @@ struct __attribute__((__packed__)) SEND_FILE_CONTROL
     uint8_t init_TTL;
     uint8_t transferID;
     uint16_t init_seq_num;
-
 };
 
 struct __attribute__((__packed__)) SEND_FILE_PACKET

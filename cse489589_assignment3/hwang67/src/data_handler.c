@@ -62,22 +62,18 @@ struct DataConn
      socklen_t addrlen = sizeof(data_addr);
 
      sock = socket(AF_INET, SOCK_STREAM, 0);
-
      if(sock < 0){
        perror("server: socket");
-
      }
      /* Make socket re-usable */
      if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0){
          perror("setsockopt");
          exit(1);
      }
-
      if(setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (int[]){1}, sizeof(int)) < 0){
          perror("setsockopt");
          exit(1);
      }
-
      bzero(&data_addr, sizeof(data_addr));
 
      data_addr.sin_family = AF_INET;
@@ -88,7 +84,6 @@ struct DataConn
          perror("server: bind");
          exit(1);
      }
-
      if(listen(sock, BACKLOG) < 0){
          perror("listen");
          exit(1);
@@ -108,7 +103,6 @@ struct DataConn
      return;
  }
 
-
 //0x05 send file
 void sending_file(char *filename) {
 
@@ -123,7 +117,6 @@ void findNextHop(char *destIP) {
           break;
       }
     }
-
     return;
 }
 
@@ -136,33 +129,54 @@ void send_file(int sock_index, char * cntrl_payload, uint16_t payload_len){
     char filename[40];
     char destIP[40];
 
-    struct SEND_FILE_CONTROL *send_file = (struct SEND_FILE_CONTROL *) cntrl_payload;
-    tempdestIp = ntohl(send_file->destationIP);
-    sprintf(destIP, "%d.%d.%d.%d", ((tempdestIp>>24)&((1<<8)-1)), ((tempdestIp>>16)&((1<<8)-1)), ((tempdestIp>>8)&((1<<8)-1)), (tempdestIp&((1<<8)-1)));
-
-    init_TTL = ntohs(send_file->init_TTL);
-    transferID = ntohs(send_file->transferID);
-    init_seq_num = ntohs(send_file->init_seq_num);
-
-    //to-do get filename
-
-    findNextHop(destIP);
-
-    sending_file(filename);
+    // struct SEND_FILE_CONTROL *send_file = (struct SEND_FILE_CONTROL *) cntrl_payload;
+    // tempdestIp = ntohl(send_file->destationIP);
+    // sprintf(destIP, "%d.%d.%d.%d", ((tempdestIp>>24)&((1<<8)-1)), ((tempdestIp>>16)&((1<<8)-1)), ((tempdestIp>>8)&((1<<8)-1)), (tempdestIp&((1<<8)-1)));
+    //
+    // init_TTL = ntohs(send_file->init_TTL);
+    // transferID = ntohs(send_file->transferID);
+    // init_seq_num = ntohs(send_file->init_seq_num);
+    //
+    // //to-do get filename
+    // FILE *ptr_file;
+    // char buf[1024];
+    // // https://www.linuxquestions.org/questions/programming-9/c-howto-read-binary-file-into-buffer-172985/
+    // ptr_file = fopen(filename, "rb");
+    // if(ptr_file == NULL){
+    //   char* cntrl_response_header = create_response_header(sock_index, 5, 0, 0);
+    //   sendALL(sock_index, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
+    //   return;
+    // }
+    // fseek(ptr_file, 0, SEEK_END);
+    // file_len = ftell(ptr_file);
+    // fseek(ptr_file, 0, SEEK_SET);
+    // loop = file_len/1024;
+    //
+    // findNextHop(destIP);
+    //
+    // sending_file(filename);
 
     return;
 }
 
+void remove_data_conn(int sock_index){
+    printf("remove_data_conn:%d\n", sock_index);
+    LIST_FOREACH(connection, &data_conn_list, next) {
+        if(connection->sockfd == sock_index) LIST_REMOVE(connection, next); // this may be unsafe?
+        free(connection);
+    }
+
+    close(sock_index);
+}
 
 int isData(int sock_index){
-	//cout<<"Is Data"<<endl;
-	 LIST_FOREACH(connection, &data_conn_list, next)
-		 if(connection->sockfd == sock_index) return 1;
-	 return 0;
+  	//cout<<"Is Data"<<endl;
+  	 LIST_FOREACH(connection, &data_conn_list, next)
+  		 if(connection->sockfd == sock_index) return 1;
+  	 return 0;
  }
 
-int new_data_conn(int sock_index)
-{
+int new_data_conn(int sock_index) {
      int fdaccept;
      socklen_t caddr_len;
      struct sockaddr_in remote_controller_addr;
@@ -181,5 +195,18 @@ int new_data_conn(int sock_index)
  }
 
  int data_recv_hook(int sock_index){
+     printf("is control_recv_hook: %d\n", sock_index);
+     char *data_header, *data_payload;
+
+
+     /* Get control header */
+     data_header = (char *) malloc(sizeof(char)*DATA_PACKET_HEADER_SIZE);
+     bzero(data_header, DATA_PACKET_HEADER_SIZE);
+
+     if(recvALL(sock_index, data_header, DATA_PACKET_HEADER_SIZE) < 0){
+         remove_data_conn(sock_index);
+         free(data_header);
+         return 0;
+     }
 
  }

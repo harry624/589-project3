@@ -23,7 +23,7 @@ struct __attribute__((__packed__)) ROUTING_UPDATE_ROUTER
 
 void create_router_socket(uint16_t routerPort);
 
-int create_UDP_listener_socket(int router_port);
+int create_UDP_listener_socket(uint16_t router_port);
 
 void recv_update_distanceVector(int sockfd);
 
