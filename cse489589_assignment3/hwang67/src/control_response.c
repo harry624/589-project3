@@ -44,7 +44,7 @@ void response(int sock_index, int cntr_code, int res_code) {
 
     response_len = CNTRL_RESP_HEADER_SIZE+payload_len;
     cntrl_response = (char *) malloc(response_len);
-    
+
     /* Copy Header */
     memcpy(cntrl_response, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
     free(cntrl_response_header);
@@ -89,7 +89,7 @@ void routing_table_response(int sock_index, struct Router routers[num_neighbors]
         // printf("padding: %d ", router_info->padding);
         router_info->nextHopID = htons(routers[i].nextHopID);
         // printf("nexthop: %d ", router_info->nextHopID);
-        router_info->cost = htons(routers[i].cost);
+        router_info->cost = htons(distanceVector[localRouterIndex][i]);
         // printf("cost: %d ", router_info->cost);
 
         printf("routerID:0x%08X, padding: 0x%08X, next_hop: 0x%08X, cost: 0x%08X\n",router_info->routerID, router_info->padding, router_info->nextHopID, router_info->cost);

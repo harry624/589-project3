@@ -264,7 +264,7 @@ void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers
        struct sockaddr_in to;
        int addr_len = sizeof(to);
        for (int i = 0; i < num_neighbors; i++){
-             if (neighbors[i] == 1){
+             if (neighbors[i] == 1 && routers[i].isRemoved == 0){
                  bzero (&to, sizeof(to));
                  to.sin_family = AF_INET;
                  inet_pton(AF_INET, routers[i].ipAddress, &to.sin_addr);

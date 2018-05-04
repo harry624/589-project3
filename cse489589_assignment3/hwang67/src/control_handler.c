@@ -149,9 +149,7 @@ void init_table(char *cntrl_payload) {
     update_interval = ntohs(init->update_interval);
 
     boardcast_interval = update_interval;
-
     // printf("number of neighbors: %d, size: %d, update_interval: %d, size: %d\n", num_neighbors, sizeof(num_neighbors),update_interval, sizeof(update_interval));
-
     //init neighbors array
     for (int i = 0; i < num_neighbors; i++){
         neighbors[i] = 0;
@@ -207,13 +205,11 @@ void init_table(char *cntrl_payload) {
 void updateCost(char *cntrl_payload){
     uint16_t routerID, cost;
     /* Get control code and payload length from the header */
-    #ifdef PACKET_USING_STRUCT
 
-        // BUILD_BUG_ON(sizeof(struct CONTROL_HEADER) != CNTRL_HEADER_SIZE); // This will FAIL during compilation itself; See comment above.
-        struct COST_UPDATE *cost_update = (struct COST_UPDATE *) cntrl_payload;
-        routerID = ntohs(cost_update->routerID);
-        cost = ntohs(cost_update->cost);
-    #endif
+    // BUILD_BUG_ON(sizeof(struct CONTROL_HEADER) != CNTRL_HEADER_SIZE); // This will FAIL during compilation itself; See comment above.
+    struct COST_UPDATE *cost_update = (struct COST_UPDATE *) cntrl_payload;
+    routerID = ntohs(cost_update->routerID);
+    cost = ntohs(cost_update->cost);
 
     int rtable_index = 0;
     for (int i = 0; i < num_neighbors; i++){
@@ -223,7 +219,7 @@ void updateCost(char *cntrl_payload){
     }
     //update local table
     distanceVector[localRouterIndex][rtable_index] = cost;
-    //boardcast
+    //udpate routing table
     updateDVBybellmanFord();
 
 }
@@ -349,8 +345,8 @@ int control_recv_hook(int sock_index){
         //CRASH [Control Code: 0x04]
         case 4:
                 crash_response(sock_index);
-                crash_router(router_socket);
-                exit(1);
+                // crash_router(router_socket);
+                exit(0);
                 break;
 
         //SENDFILE [Control Code: 0x05]
