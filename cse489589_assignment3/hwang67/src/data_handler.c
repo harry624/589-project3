@@ -109,11 +109,11 @@ void sending_file(char *filename) {
     return;
 }
 
-void findNextHop(char *destIP) {
+void findNextHop(uint32_t destIP) {
     int destationID;
     for(int i = 0; i < num_neighbors; i++){
-      if (!strcmp(destIP, routers[i].ipAddress)){
-          destationID = i;
+      if (destIP == routers[i].int32_ip){
+          destationID = routers[i].routerID;
           break;
       }
     }
@@ -126,35 +126,45 @@ void send_file(int sock_index, char * cntrl_payload, uint16_t payload_len){
     uint8_t transferID;
     uint16_t init_seq_num;
 
-    char filename[40];
+    char *filename;
     char destIP[40];
 
-    // struct SEND_FILE_CONTROL *send_file = (struct SEND_FILE_CONTROL *) cntrl_payload;
-    // tempdestIp = ntohl(send_file->destationIP);
-    // sprintf(destIP, "%d.%d.%d.%d", ((tempdestIp>>24)&((1<<8)-1)), ((tempdestIp>>16)&((1<<8)-1)), ((tempdestIp>>8)&((1<<8)-1)), (tempdestIp&((1<<8)-1)));
-    //
-    // init_TTL = ntohs(send_file->init_TTL);
-    // transferID = ntohs(send_file->transferID);
-    // init_seq_num = ntohs(send_file->init_seq_num);
-    //
-    // //to-do get filename
-    // FILE *ptr_file;
-    // char buf[1024];
-    // // https://www.linuxquestions.org/questions/programming-9/c-howto-read-binary-file-into-buffer-172985/
-    // ptr_file = fopen(filename, "rb");
-    // if(ptr_file == NULL){
-    //   char* cntrl_response_header = create_response_header(sock_index, 5, 0, 0);
-    //   sendALL(sock_index, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
-    //   return;
-    // }
-    // fseek(ptr_file, 0, SEEK_END);
-    // file_len = ftell(ptr_file);
-    // fseek(ptr_file, 0, SEEK_SET);
-    // loop = file_len/1024;
-    //
-    // findNextHop(destIP);
-    //
-    // sending_file(filename);
+    struct SEND_FILE_CONTROL *send_file = (struct SEND_FILE_CONTROL *) cntrl_payload;
+    tempdestIp = ntohl(send_file->destationIP);
+    sprintf(destIP, "%d.%d.%d.%d", ((tempdestIp>>24)&((1<<8)-1)), ((tempdestIp>>16)&((1<<8)-1)), ((tempdestIp>>8)&((1<<8)-1)), (tempdestIp&((1<<8)-1)));
+
+    init_TTL = ntohs(send_file->init_TTL);
+    transferID = ntohs(send_file->transferID);
+    init_seq_num = ntohs(send_file->init_seq_num);
+
+    //to-do get filename
+    int file_name_len = payload_len - 8 + 1;
+    filename = (char*)malloc(file_name_len); // for remaining size, 1 for null terminator
+    memset(filename, 0, file_name_len);
+    strncpy(filename, cntrl_payload+8, file_name_len-1);
+    filename[file_name_len] = '\0';
+
+    int file_len=0;
+  	int loop = 0;
+
+    FILE *ptr_file;
+    char buf[1024];
+    // https://www.linuxquestions.org/questions/programming-9/c-howto-read-binary-file-into-buffer-172985/
+    ptr_file = fopen(filename, "rb");
+    if(ptr_file == NULL){
+      char* cntrl_response_header = create_response_header(sock_index, 5, 0, 0);
+      sendALL(sock_index, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
+      return;
+    }
+
+    fseek(ptr_file, 0, SEEK_END);
+    file_len = ftell(ptr_file);
+    fseek(ptr_file, 0, SEEK_SET);
+    loop = file_len/1024;
+
+    findNextHop(tempdestIp);
+
+    sending_file(filename);
 
     return;
 }

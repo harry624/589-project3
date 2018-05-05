@@ -105,36 +105,55 @@ int create_UDP_listener_socket(uint16_t router_port){
 
 //receive UDP broadcast
 void updateDVBybellmanFord() {
-    for (int i = 0; i < num_neighbors; i++){
-        for (int j = 0; j < num_neighbors; j++){
-            if (distanceVector[localRouterIndex][i] > distanceVector[localRouterIndex][j] + distanceVector[j][i]){
-                distanceVector[localRouterIndex][i] = distanceVector[localRouterIndex][j] + distanceVector[j][i];
-                routers[i].nextHopID = routers[j].routerID;
-                printf("update index:%d, nextHopID is: %d\n", i, routers[i].nextHopID);
-            }
-        }
-    }
-
-    // int count;
-    // do{
-    //     count = 0;
-    //     for (int i = 0; i < num_neighbors; i++){
-    //         for (int j = 0; j < num_neighbors; j++){
-    //             for (int k = 1; k < num_neighbors; k++){
-    //                 if (distanceVector[i][j] > distanceVector[i][k] + distanceVector[k][j]){
-    //                     distanceVector[i][j] = distanceVector[i][k] + distanceVector[k][j];
-    //                     routers[i].nextHopID = routers[k].routerID;
-    //                     // neighbors[i] = 1;
-    //                     count++;
-    //                 }
-    //             }
+    // for (int i = 0; i < num_neighbors; i++){
+    //     for (int j = 0; j < num_neighbors; j++){
+    //         if (distanceVector[localRouterIndex][i] > distanceVector[localRouterIndex][j] + distanceVector[j][i]){
+    //             distanceVector[localRouterIndex][i] = distanceVector[localRouterIndex][j] + distanceVector[j][i];
+    //             routers[i].nextHopID = routers[j].routerID;
+    //             routers[i].cost = distanceVector[localRouterIndex][i];
+    //             printf("update index:%d, nextHopID is: %d\n", i, routers[i].nextHopID);
     //         }
     //     }
-    // }while(count != 0);
+    // }
+
+    // for (int i = 0; i < num_neighbors && neighbors[i] == 0; i++){
+    //     for (int j = 0; j < num_neighbors; j++){
+    //         if (distanceVector[j][i] < INF){
+    //             distanceVector[i][j] = distanceVector[j][i];
+    //         }
+    //     }
+    // }
+
+    int count = 0;
+    do {
+        int count = 0;
+        for (int i = 0; i < num_neighbors; i++){
+            for (int j = 0; j < num_neighbors; j++){
+                for (int k = 1; k < num_neighbors; k++){
+                    if (distanceVector[i][j] > distanceVector[i][k] + distanceVector[k][j]){
+                        distanceVector[i][j] = distanceVector[i][k] + distanceVector[k][j];
+                        count++;
+                        if (i == localRouterIndex){
+                            routers[j].nextHopID = routers[k].routerID;
+                            routers[j].cost = distanceVector[i][j];
+                        }
+                    }
+                    if (distanceVector[i][j] > INF){
+                        distanceVector[i][j] = INF;
+                    }
+                }
+            }
+        }
+    }while(count != 0);
 
     for (int i = 0; i < num_neighbors; i++){
         for (int j = 0; j < num_neighbors; j++){
-            printf("%d, next hopid: %d\t", distanceVector[i][j], routers[j].nextHopID);
+            if(i == localRouterIndex){
+              printf("%d, next hopid: %d\t", distanceVector[i][j], routers[j].nextHopID);
+
+            }else{
+              printf("%d\t", distanceVector[i][j]);
+            }
         }
         printf("\n");
     }
@@ -189,7 +208,7 @@ void recv_update_distanceVector(int sockfd) {
         sprintf(sourceIp, "%d.%d.%d.%d",
                 ((tmpIP>>24)&((1<<8)-1)), ((tmpIP>>16)&((1<<8)-1)), ((tmpIP>>8)&((1<<8)-1)), (tmpIP&((1<<8)-1)));
 
-        //find the source router index
+        //find the source boardcast router index
         for (int i = 0; i < num_neighbors; i++){
              if (tmpIP == routers[i].int32_ip){
                  // sourceRouterID = i + 1;
@@ -203,7 +222,7 @@ void recv_update_distanceVector(int sockfd) {
         printf("num_fields: %d, sourceRouter_port: %d, sourceIP: %s, r_table_index: %d\n",
                   num_fields, source_router_port, sourceIp, sourceRouterIndex);
 
-        //udpate routing table
+        //udpate routing table row of source router ID
         int routerIndex = 0;
         for (int i = 0; i < num_fields; i++){
             struct ROUTING_UPDATE_ROUTER *router_update = (struct ROUTING_UPDATE_ROUTER *) (routing_update + ROUTING_HEADER_SIZE + i * 0x0c);
@@ -214,14 +233,22 @@ void recv_update_distanceVector(int sockfd) {
             for (int j = 0; j < num_neighbors; j++){
                 if (routers[j].routerID == routerId){
                     routerIndex = j;
-
+                    routers[j].cost = cost;
                     break;
                 }
             }
-            // distanceVector[sourceRouterID-1][routerId-1] = cost;
+
+            //check if the cost have been increase and update the cost accordingly before run the bellmanford alg
+            // printf("routerID: %d, old cost: %d, new cost: %d\n", routerId,distanceVector[sourceRouterIndex][routerIndex], cost);
+            if (distanceVector[sourceRouterIndex][routerIndex] < cost && routers[routerIndex].nextHopID == routers[sourceRouterIndex].routerID){
+                distanceVector[localRouterIndex][routerIndex] = cost + distanceVector[sourceRouterIndex][localRouterIndex];
+                if (distanceVector[localRouterIndex][routerIndex]  > INF){
+                    distanceVector[localRouterIndex][routerIndex] = INF;
+                    routers[routerIndex].nextHopID = INF;
+                }
+            }
+
             distanceVector[sourceRouterIndex][routerIndex] = cost;
-            // printf("update distance vector of neighbor %d, index: %d\n", sourceRouterIndex+1, routerIndex);
-            routers[routerIndex].cost = cost;
         }
 
         updateDVBybellmanFord();
@@ -236,7 +263,7 @@ void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers
        uint16_t num_fields, sourceRouterPort;
        uint32_t sourceIP;
 
-       num_fields = updated_num_neighbors;
+       num_fields = num_neighbors;
 
        sourceRouterPort = routers[localRouterIndex].routerPort;
        //cast dot notation to uint32_t

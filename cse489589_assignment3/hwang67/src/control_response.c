@@ -42,7 +42,7 @@ void response(int sock_index, int cntr_code, int res_code) {
 
     cntrl_response_header = create_response_header(sock_index, cntr_code, res_code, payload_len);
 
-    response_len = CNTRL_RESP_HEADER_SIZE+payload_len;
+    response_len = CNTRL_RESP_HEADER_SIZE + payload_len;
     cntrl_response = (char *) malloc(response_len);
 
     /* Copy Header */

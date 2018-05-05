@@ -205,22 +205,44 @@ void init_table(char *cntrl_payload) {
 //0x03 update router cost
 
 void updateCost(char *cntrl_payload){
-    uint16_t routerID, cost;
+    uint16_t routerID, new_cost;
     /* Get control code and payload length from the header */
 
     struct COST_UPDATE *cost_update = (struct COST_UPDATE *) cntrl_payload;
     routerID = ntohs(cost_update->routerID);
-    cost = ntohs(cost_update->cost);
+    new_cost = ntohs(cost_update->cost);
 
+    //find the router index of cost update
     int rtable_index = 0;
     for (int i = 0; i < num_neighbors; i++){
         if (routers[i].routerID == routerID){
               rtable_index = i;
+              //update local router array
+              routers[rtable_index].cost = new_cost;
+              //update local table
+              printf("update routerID: %d, index: %d\n", routerID, rtable_index);
+
+              if (distanceVector[localRouterIndex][rtable_index] > new_cost){
+                  routers[i].nextHopID = routers[i].routerID;
+              }else if (new_cost == INF){
+                  routers[i].nextHopID = INF;
+              }
+              distanceVector[localRouterIndex][rtable_index] = new_cost;
+              break;
         }
     }
-    //update local table
-    printf("update routerID: %d, index: %d\n", routerID, rtable_index);
-    distanceVector[localRouterIndex][rtable_index] = cost;
+
+    //check if the cost have been increase and update the cost accordingly before run the bellmanford alg
+    for(int i = 0; i < num_neighbors; i++){
+        if (routers[i].nextHopID == routerID){
+            distanceVector[localRouterIndex][i] = distanceVector[localRouterIndex][rtable_index] + distanceVector[rtable_index][i];
+            if (distanceVector[localRouterIndex][i] > INF){
+                distanceVector[localRouterIndex][i] = INF;
+                routers[i].nextHopID = INF;
+            }
+        }
+    }
+
     //udpate routing table
     updateDVBybellmanFord();
 
