@@ -110,22 +110,22 @@
              tv.tv_usec = 0;
 
              //add missed count;
-             for (int i = 0; i < num_neighbors && neighbors[i] == 1; i++){
-                if (routers[i].firstupdateReceived == 1){
-                    routers[i].missedcnt++;
-                }
-             }
+             // for (int i = 0; i < num_neighbors && neighbors[i] == 1; i++){
+             //    if (routers[i].firstupdateReceived == 1){
+             //        routers[i].missedcnt++;
+             //    }
+             // }
 
              // int count = 0;
              //check if missed count > 3 time period
-             for (int i = 0; i < num_neighbors && neighbors[i] == 1; i++){
-                if (routers[i].missedcnt >= 3 * boardcast_interval){
-                    // count++;
-                    distanceVector[localRouterIndex - 1][i] = INF;
-                    routers[i].cost = INF;
-                    routers[i].isRemoved = 1;
-                }
-             }
+             // for (int i = 0; i < num_neighbors && neighbors[i] == 1; i++){
+             //    if (routers[i].missedcnt >= 3 * boardcast_interval){
+             //        // count++;
+             //        distanceVector[localRouterIndex - 1][i] = INF;
+             //        routers[i].cost = INF;
+             //        routers[i].isRemoved = 1;
+             //    }
+             // }
 
              // updated_num_neighbors = updated_num_neighbors - count;
 

@@ -155,7 +155,6 @@ void init_table(char *cntrl_payload) {
         neighbors[i] = 0;
     }
 
-    #ifdef PACKET_USING_STRUCT
         // BUILD_BUG_ON(sizeof(struct ROUTER_INIT) != 512); // This will FAIL during compilation itself; See comment above.
         //save all the routers info in an array
         for (int i = 0; i < num_neighbors; i++){
@@ -165,9 +164,10 @@ void init_table(char *cntrl_payload) {
             routers[i].dataPort = ntohs(init->dataPort);
             routers[i].cost = ntohs(init->cost);
             uint32_t tmpIP = ntohl(init->ipAddress);
+            routers[i].int32_ip = tmpIP;
+
             sprintf(routers[i].ipAddress, "%d.%d.%d.%d", ((tmpIP>>24)&((1<<8)-1)), ((tmpIP>>16)&((1<<8)-1)), ((tmpIP>>8)&((1<<8)-1)), (tmpIP&((1<<8)-1)));
 
-            // printf("routerID:%d, port_1: %d, port_2: %d, cost: %d, ipAddress: %s\n",routers[i].routerID, routers[i].routerPort, routers[i].dataPort, routers[i].cost, routers[i].ipAddress);
 
             routers[i].isRemoved = 0;
             routers[i].missedcnt = 0;
@@ -175,6 +175,7 @@ void init_table(char *cntrl_payload) {
             routers[i].nextHopID = ntohs(init->routerID);
 
             routers[i].rTable_index = i;
+
             //One of the entries should be to self with a cost of 0 and next hop the router itself.
             //If the cost of path to a router is INF (infinity), the next hop router ID would also be INF in such a case
 
@@ -187,9 +188,10 @@ void init_table(char *cntrl_payload) {
                 //update neighbors array
                 neighbors[i] = 1;
             }
-        }
-    #endif
 
+            printf("routerID:%d, tableIndex: %d, router_port: %d, data_port: %d, cost: %d, ipAddress: %s\n",routers[i].routerID, routers[i].rTable_index, routers[i].routerPort, routers[i].dataPort, routers[i].cost, routers[i].ipAddress);
+
+        }
 
     create_routing_table();
 
@@ -206,7 +208,6 @@ void updateCost(char *cntrl_payload){
     uint16_t routerID, cost;
     /* Get control code and payload length from the header */
 
-    // BUILD_BUG_ON(sizeof(struct CONTROL_HEADER) != CNTRL_HEADER_SIZE); // This will FAIL during compilation itself; See comment above.
     struct COST_UPDATE *cost_update = (struct COST_UPDATE *) cntrl_payload;
     routerID = ntohs(cost_update->routerID);
     cost = ntohs(cost_update->cost);
@@ -218,6 +219,7 @@ void updateCost(char *cntrl_payload){
         }
     }
     //update local table
+    printf("update routerID: %d, index: %d\n", routerID, rtable_index);
     distanceVector[localRouterIndex][rtable_index] = cost;
     //udpate routing table
     updateDVBybellmanFord();

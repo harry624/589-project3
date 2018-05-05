@@ -110,14 +110,31 @@ void updateDVBybellmanFord() {
             if (distanceVector[localRouterIndex][i] > distanceVector[localRouterIndex][j] + distanceVector[j][i]){
                 distanceVector[localRouterIndex][i] = distanceVector[localRouterIndex][j] + distanceVector[j][i];
                 routers[i].nextHopID = routers[j].routerID;
-                // neighbors[i] = 1;
+                printf("update index:%d, nextHopID is: %d\n", i, routers[i].nextHopID);
             }
         }
     }
 
+    // int count;
+    // do{
+    //     count = 0;
+    //     for (int i = 0; i < num_neighbors; i++){
+    //         for (int j = 0; j < num_neighbors; j++){
+    //             for (int k = 1; k < num_neighbors; k++){
+    //                 if (distanceVector[i][j] > distanceVector[i][k] + distanceVector[k][j]){
+    //                     distanceVector[i][j] = distanceVector[i][k] + distanceVector[k][j];
+    //                     routers[i].nextHopID = routers[k].routerID;
+    //                     // neighbors[i] = 1;
+    //                     count++;
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }while(count != 0);
+
     for (int i = 0; i < num_neighbors; i++){
         for (int j = 0; j < num_neighbors; j++){
-            printf("%d\t", distanceVector[i][j]);
+            printf("%d, next hopid: %d\t", distanceVector[i][j], routers[j].nextHopID);
         }
         printf("\n");
     }
@@ -133,6 +150,7 @@ void recv_update_distanceVector(int sockfd) {
 
         char sourceIp[40];
         int sourceRouterID;
+        int sourceRouterIndex;
         /* Get control header */
         routing_header = (char *) malloc(sizeof(char)*ROUTING_HEADER_SIZE);
         bzero(routing_header, ROUTING_HEADER_SIZE);
@@ -171,27 +189,41 @@ void recv_update_distanceVector(int sockfd) {
         sprintf(sourceIp, "%d.%d.%d.%d",
                 ((tmpIP>>24)&((1<<8)-1)), ((tmpIP>>16)&((1<<8)-1)), ((tmpIP>>8)&((1<<8)-1)), (tmpIP&((1<<8)-1)));
 
-        //find the source router ID
+        //find the source router index
         for (int i = 0; i < num_neighbors; i++){
-           if (!strcmp(sourceIp, routers[i].ipAddress) ){
-               sourceRouterID = i + 1;
-               routers[i].missedcnt = 0;
-               routers[i].firstupdateReceived = 1;
-               break;
-            }
+             if (tmpIP == routers[i].int32_ip){
+                 // sourceRouterID = i + 1;
+                 sourceRouterIndex = i;
+                 routers[i].missedcnt = 0;
+                 routers[i].firstupdateReceived = 1;
+                 break;
+              }
         }
-        printf("num_fields: %d, sourceRouter_port: %d, sourceIP: %s, id: %d\n",
-                  num_fields, source_router_port, sourceIp, sourceRouterID);
+
+        printf("num_fields: %d, sourceRouter_port: %d, sourceIP: %s, r_table_index: %d\n",
+                  num_fields, source_router_port, sourceIp, sourceRouterIndex);
 
         //udpate routing table
+        int routerIndex = 0;
         for (int i = 0; i < num_fields; i++){
             struct ROUTING_UPDATE_ROUTER *router_update = (struct ROUTING_UPDATE_ROUTER *) (routing_update + ROUTING_HEADER_SIZE + i * 0x0c);
             uint16_t routerId = ntohs(router_update->routerID);
             uint16_t cost = ntohs(router_update->cost);
 
+            //get routerID index in router array
+            for (int j = 0; j < num_neighbors; j++){
+                if (routers[j].routerID == routerId){
+                    routerIndex = j;
 
-            distanceVector[sourceRouterID-1][routerId-1] = cost;
+                    break;
+                }
+            }
+            // distanceVector[sourceRouterID-1][routerId-1] = cost;
+            distanceVector[sourceRouterIndex][routerIndex] = cost;
+            // printf("update distance vector of neighbor %d, index: %d\n", sourceRouterIndex+1, routerIndex);
+            routers[routerIndex].cost = cost;
         }
+
         updateDVBybellmanFord();
 
         return;

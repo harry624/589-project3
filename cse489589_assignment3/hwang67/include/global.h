@@ -19,6 +19,7 @@ struct Router
     uint16_t dataPort;
     uint16_t cost;
     uint16_t nextHopID;
+    uint32_t int32_ip;
 
     char ipAddress[40];
     int firstupdateReceived;
