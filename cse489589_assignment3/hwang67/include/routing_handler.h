@@ -25,7 +25,7 @@ void create_router_socket(uint16_t routerPort);
 
 int create_UDP_listener_socket(uint16_t router_port);
 
-void recv_update_distanceVector(int sockfd);
+int recv_update_distanceVector(int sockfd);
 
 void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers[]);
 

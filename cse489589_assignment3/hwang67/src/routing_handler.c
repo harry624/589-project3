@@ -37,9 +37,9 @@
 
  #include "../include/global.h"
  #include "../include/author.h"
+ #include "../include/connection_manager.h"
  #include "../include/control_handler.h"
  #include "../include/control_header_lib.h"
- #include "../include/connection_manager.h"
  #include "../include/control_response.h"
  #include "../include/network_util.h"
  #include "../include/routing_handler.h"
@@ -116,14 +116,6 @@ void updateDVBybellmanFord() {
     //     }
     // }
 
-    // for (int i = 0; i < num_neighbors && neighbors[i] == 0; i++){
-    //     for (int j = 0; j < num_neighbors; j++){
-    //         if (distanceVector[j][i] < INF){
-    //             distanceVector[i][j] = distanceVector[j][i];
-    //         }
-    //     }
-    // }
-
     int count = 0;
     do {
         int count = 0;
@@ -161,7 +153,7 @@ void updateDVBybellmanFord() {
     return;
 }
 
-void recv_update_distanceVector(int sockfd) {
+int recv_update_distanceVector(int sockfd) {
         printf("recv_update_distanceVector\n");
         char *routing_header, *routing_payload;
         char *routing_update;
@@ -192,12 +184,12 @@ void recv_update_distanceVector(int sockfd) {
 
         if (res < 0){
            perror("receive broadcast failed");
-           return;
+           return -1;
         }
         printf("received :%d\n", res);
 
         if (res < 8){
-          return;
+          return -1;
         }
 
         /* Get control code and payload length from the header */
@@ -241,19 +233,35 @@ void recv_update_distanceVector(int sockfd) {
             //check if the cost have been increase and update the cost accordingly before run the bellmanford alg
             // printf("routerID: %d, old cost: %d, new cost: %d\n", routerId,distanceVector[sourceRouterIndex][routerIndex], cost);
             if (distanceVector[sourceRouterIndex][routerIndex] < cost && routers[routerIndex].nextHopID == routers[sourceRouterIndex].routerID){
-                distanceVector[localRouterIndex][routerIndex] = cost + distanceVector[sourceRouterIndex][localRouterIndex];
-                if (distanceVector[localRouterIndex][routerIndex]  > INF){
-                    distanceVector[localRouterIndex][routerIndex] = INF;
-                    routers[routerIndex].nextHopID = INF;
-                }
+                // distanceVector[localRouterIndex][routerIndex] = cost + distanceVector[sourceRouterIndex][localRouterIndex];
+                distanceVector[localRouterIndex][routerIndex] = INF;
+                routers[routerIndex].nextHopID = INF;
+
+                // if (distanceVector[localRouterIndex][routerIndex]  > INF){
+                //     distanceVector[localRouterIndex][routerIndex] = INF;
+                //     routers[routerIndex].nextHopID = INF;
+                // }
             }
 
             distanceVector[sourceRouterIndex][routerIndex] = cost;
         }
 
+        for (int i = 0; i < num_neighbors; i++){
+            if (i == localRouterIndex || neighbors[i] == 1){
+                continue;
+            }
+
+            printf("update routing table index: %d, not neighbors\n", i);
+            for (int j = 0; j < num_neighbors; j++){
+                if (distanceVector[j][i] < INF){
+                    distanceVector[i][j] = distanceVector[j][i];
+                }
+            }
+        }
+
         updateDVBybellmanFord();
 
-        return;
+        return sourceRouterIndex;
 }
 
 void boardcast_update_routing(int sockfd, int neighbors[], struct Router routers[]) {

@@ -77,7 +77,8 @@
                      //router socket
                      else if (i == router_socket){
                        // printf("handle router_socket: %d\n", i);
-                       recv_update_distanceVector(i);
+                       int router_index = recv_update_distanceVector(i);
+
                      }
                      //data socket
                      else if (i == data_socket){

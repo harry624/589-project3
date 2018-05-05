@@ -240,6 +240,7 @@ void updateCost(char *cntrl_payload){
                 distanceVector[localRouterIndex][i] = INF;
                 routers[i].nextHopID = INF;
             }
+
         }
     }
 
@@ -369,14 +370,14 @@ int control_recv_hook(int sock_index){
         //CRASH [Control Code: 0x04]
         case 4:
                 crash_response(sock_index);
-                // crash_router(router_socket);
+                crash_router(router_socket);
                 exit(0);
                 break;
 
         //SENDFILE [Control Code: 0x05]
         case 5:
-                send_file(sock_index, cntrl_payload, payload_len);
                 sendfile_response(sock_index);
+                send_file(sock_index, cntrl_payload, payload_len);
                 break;
 
         //SENDFILE-STATS [Control Code: 0x06]
