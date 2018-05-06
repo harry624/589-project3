@@ -55,27 +55,45 @@ struct DataConn
  LIST_HEAD(DataConnsHead, DataConn) data_conn_list;
 
 //
-int createSocketToNextRouter(uint32_t destIp, uint16_t dataPort){
-    int sock;
-    struct sockaddr_in data_addr;
-    socklen_t addrlen = sizeof(data_addr);
+int createSocketToNextRouter(char* destIp, uint16_t dataPort){
+      printf("connect to destIP: %s, data_port: %d\n",destIp, dataPort);
+        //socket params
+      int sockfd;
+      int status;
+      struct addrinfo hints, *servinfo;
+      struct sockaddr_in local;
+      struct sockaddr_in sa;
+      int yes = 1;
 
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-    if(sock < 0){
-      perror("server: socket");
-      return -1;
-    }
-    bzero(&data_addr, sizeof(data_addr));
+      char port_s[10];
+      sprintf(port_s, "%d", dataPort);
 
-    data_addr.sin_family = AF_INET;
-    data_addr.sin_addr.s_addr = htonl(destIp);
-    data_addr.sin_port = htons(dataPort);
+      //  load up address structs with getaddrinfo():
+      memset(&hints, 0, sizeof hints);
+      hints.ai_family = AF_UNSPEC;
+      hints.ai_socktype = SOCK_STREAM;
 
-    if(connect(sock, (struct sockaddr*)&data_addr, sizeof data_addr) == -1){
-        perror("connect failed");
+      if ((status = getaddrinfo(destIp, port_s, &hints, &servinfo)) == -1){
+          fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
+          return -1;
+      }
+      // make a socket:
+      if ((sockfd = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol)) == -1){
+          perror("client: fail to create socket");
+          return -1;
+      }
+      if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+        perror("setsockopt");
         return -1;
-    }
-    return sock;
+      }
+      // connect!
+      if(connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen) == -1){
+          close(sockfd);
+          perror("client: fail to connect");
+          return -1;
+      }
+
+      return sockfd;
 }
 
 //listener
@@ -122,6 +140,7 @@ int createSocketToNextRouter(uint32_t destIp, uint16_t dataPort){
 
      if(data_socket > fdmax) fdmax = data_socket;
 
+     printf("start listening at data port: %d\n", dataPort);
      printf("data_socket: %d, fdmax: %d, is in the list: %d\n", data_socket, fdmax, FD_ISSET(data_socket, &master));
 
      return;
@@ -129,7 +148,6 @@ int createSocketToNextRouter(uint32_t destIp, uint16_t dataPort){
 
 //0x05 send file
 char* get_File_Name(uint16_t transfer_id){
-
     // number of digits
     int num;
 	if(transfer_id > 100){
@@ -157,13 +175,13 @@ uint16_t findNextHop(uint32_t destIP) {
           return routers[i].nextHopID;
       }
     }
-    return -1;
+    return INF;
 }
 
 int sending_file(uint32_t destIP, uint8_t transferID, uint8_t TTL, uint16_t seq_num, int finbit, char* file) {
     //find next hop
     uint16_t next_hop_id;
-    int next_hop_index = -1;
+    int next_hop_index =  INF;
     next_hop_id = findNextHop(destIP);
 
     for (int i = 0; i < num_neighbors; i++){
@@ -172,7 +190,9 @@ int sending_file(uint32_t destIP, uint8_t transferID, uint8_t TTL, uint16_t seq_
         }
     }
 
-    if (next_hop_id == -1){
+    printf("nextHopID is %d, index is %d\n", next_hop_id, next_hop_index);
+
+    if (next_hop_id == INF){
         return -1;
     }
 
@@ -181,26 +201,43 @@ int sending_file(uint32_t destIP, uint8_t transferID, uint8_t TTL, uint16_t seq_
     file_packet = (char *) malloc(DATA_PACKET_SIZE);
     uint16_t FIN     = 0x00;
     uint16_t padding = 0x00;
-    destIP = htonl(destIP);
-    seq_num = htons(seq_num);
+    // destIP = htonl(destIP);
+    // seq_num = htons(seq_num);
 
-    memcpy(file_packet, &destIP, sizeof(destIP));
-    memcpy(file_packet + 4, &transferID, sizeof(transferID));
-    memcpy(file_packet + 5, &TTL, sizeof(TTL));
-    memcpy(file_packet + 6, &seq_num, sizeof(seq_num));
+    struct DATA_PACKET *struct_file;
+    struct_file = (struct DATA_PACKET *)file_packet;
 
+    struct_file->dest_ip = htonl(destIP);
+    struct_file->transfer_id = transferID;
+    struct_file->ttl = TTL;
+    struct_file->seq_no = seq_num;
     if (finbit == 1){
-        FIN = htons(1);
+        struct_file-> FIN = htons(1);
     }else{
-        FIN = htons(0);
+        struct_file-> FIN = htons(0);
     }
-    memcpy(file_packet + 8, &FIN, sizeof(FIN));
-  	memcpy(file_packet + 9, &padding, sizeof(padding));
-  	memcpy(file_packet + 12, file, 1024);
+    struct_file->payload = file;
 
-    //save the penultimateDataPacket and ultimateDataPacket
-    memcpy(penultimateDataPacket, ultimateDataPacket, DATA_PACKET_SIZE);
-  	memcpy(ultimateDataPacket, file_packet, DATA_PACKET_SIZE);
+    //
+    // memcpy(file_packet, &destIP, sizeof(destIP));
+    // memcpy(file_packet + 0x04, &transferID, sizeof(transferID));
+    // memcpy(file_packet + 0x05, &TTL, sizeof(TTL));
+    // memcpy(file_packet + 0x06, &seq_num, sizeof(seq_num));
+    //
+    // if (finbit == 1){
+    //     FIN = htons(1);
+    // }else{
+    //     FIN = htons(0);
+    // }
+    // memcpy(file_packet + 8, &FIN, sizeof(FIN));
+  	// memcpy(file_packet + 9, &padding, sizeof(padding));
+  	// memcpy(file_packet + 12, file, 1024);
+
+
+    //save the penultimateDataPacket and lastDataPacket
+    memcpy(penultimateDataPacket, lastDataPacket, DATA_PACKET_SIZE);
+  	memcpy(lastDataPacket, file_packet, DATA_PACKET_SIZE);
+
     //check if it is the first router
     if(fileStatArray[transferID].transfer_id != transferID){
       	fileStatArray[transferID].first_seq_num = ntohs(seq_num);
@@ -215,13 +252,14 @@ int sending_file(uint32_t destIP, uint8_t transferID, uint8_t TTL, uint16_t seq_
 
       int data_Sock = routers[next_hop_index].data_socket_fd;
       if(data_Sock == 0){
-        	data_Sock = createSocketToNextRouter(routers[next_hop_index].int32_ip, routers[next_hop_index].dataPort);
+        	data_Sock = createSocketToNextRouter(routers[next_hop_index].ipAddress, routers[next_hop_index].dataPort);
         	routers[next_hop_index].data_socket_fd = data_Sock;
       }
 
       if (data_Sock > 0){
         sendALL(data_Sock, file_packet, DATA_PACKET_SIZE);
       }
+
       if(finbit == 1){
           //close the socket
           close(data_Sock);
@@ -300,21 +338,21 @@ void handle_data(int sock_index){
             }
 
             //save penultimateDataPacket
-            memcpy(penultimateDataPacket, ultimateDataPacket, DATA_PACKET_SIZE);
+            memcpy(penultimateDataPacket, lastDataPacket, DATA_PACKET_SIZE);
 
-            //save ultimateDataPacket
+            //save lastDataPacket
             dest_ip = htonl(dest_ip);
             seq_num = htons(seq_num);
             uint16_t FIN = htons(FIN);
             uint16_t padding = 0x00;
 
-            memcpy(ultimateDataPacket, &dest_ip, sizeof(dest_ip));
-            memcpy(ultimateDataPacket + 4, &transfer_id, sizeof(transfer_id));
-            memcpy(ultimateDataPacket + 5, &ttl, sizeof(ttl));
-            memcpy(ultimateDataPacket + 6, &seq_num, sizeof(seq_num));
-            memcpy(ultimateDataPacket + 8, &FIN, sizeof(FIN));
-            memcpy(ultimateDataPacket + 9, &padding, sizeof(padding));
-            memcpy(ultimateDataPacket + 12, file_data, 1024);
+            memcpy(lastDataPacket, &dest_ip, sizeof(dest_ip));
+            memcpy(lastDataPacket + 4, &transfer_id, sizeof(transfer_id));
+            memcpy(lastDataPacket + 5, &ttl, sizeof(ttl));
+            memcpy(lastDataPacket + 6, &seq_num, sizeof(seq_num));
+            memcpy(lastDataPacket + 8, &FIN, sizeof(FIN));
+            memcpy(lastDataPacket + 9, &padding, sizeof(padding));
+            memcpy(lastDataPacket + 12, file_data, 1024);
         }
     }
 
@@ -365,6 +403,7 @@ void send_file(int sock_index, char * cntrl_payload, uint16_t payload_len){
     file_pointer = fopen(filename, "rb");
 
     if(file_pointer == NULL){
+        printf("cannot find file\n");
         return;
     }
 
@@ -375,6 +414,7 @@ void send_file(int sock_index, char * cntrl_payload, uint16_t payload_len){
 
   	int finbit = 0;
     int file_stat = 0;
+    printf("totalPacketsToBeSent: %d\n", totalPacketsToBeSent);
 
   	for(int i=0; i < totalPacketsToBeSent; i++){
     		if(i == totalPacketsToBeSent - 1){

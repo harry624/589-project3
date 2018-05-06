@@ -197,7 +197,7 @@ void init_table(char *cntrl_payload) {
 
     // printf("router port:%d\n", routers[localRouterIndex].routerPort);
     create_router_socket(routers[localRouterIndex].routerPort);
-    create_data_socket(routers[localRouterIndex].routerPort);
+    create_data_socket(routers[localRouterIndex].dataPort);
     //
     return;
 }

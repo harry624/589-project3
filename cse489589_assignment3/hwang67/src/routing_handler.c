@@ -246,18 +246,18 @@ int recv_update_distanceVector(int sockfd) {
             distanceVector[sourceRouterIndex][routerIndex] = cost;
         }
 
-        for (int i = 0; i < num_neighbors; i++){
-            if (i == localRouterIndex || neighbors[i] == 1){
-                continue;
-            }
-
-            // printf("update routing table index: %d, not neighbors\n", i);
-            for (int j = 0; j < num_neighbors; j++){
-                if (distanceVector[j][i] < INF){
-                    distanceVector[i][j] = distanceVector[j][i];
-                }
-            }
-        }
+        // for (int i = 0; i < num_neighbors; i++){
+        //     if (i == localRouterIndex || neighbors[i] == 1){
+        //         continue;
+        //     }
+        //
+        //     // printf("update routing table index: %d, not neighbors\n", i);
+        //     for (int j = 0; j < num_neighbors; j++){
+        //         if (distanceVector[j][i] < INF){
+        //             distanceVector[i][j] = distanceVector[j][i];
+        //         }
+        //     }
+        // }
 
         updateDVBybellmanFord();
 

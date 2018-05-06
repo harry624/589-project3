@@ -146,20 +146,21 @@ void sendfile_stats_response(int sock_index, char* cntrl_payload){
     }
 
     int file_stat_index = fileStatArray[transferID].index;
-    int payload_len = 4 + (file_stat_index)*sizeof(uint16_t);
+    int payload_len = 0x04 + (file_stat_index) * sizeof (uint16_t);
+
+    cntrl_response_header = create_response_header(sock_index, 6, 0, payload_len);
 
     cntrl_response_payload = (char*)malloc(sizeof(char)*payload_len);
     memcpy(cntrl_response_payload, &transferID, sizeof(transferID));
-    memcpy(cntrl_response_payload+1, &fileStatArray[transferID].ttl, sizeof(fileStatArray[transferID].ttl));
-    memcpy(cntrl_response_payload+2, &padding, sizeof(padding));
-    int offset = 4;
+    memcpy(cntrl_response_payload + 0x01, &fileStatArray[transferID].ttl, sizeof(fileStatArray[transferID].ttl));
+    memcpy(cntrl_response_payload + 0x02, &padding, sizeof(padding));
+    int offset = 0x04;
 
-    for(int i=0; i<file_stat_index; i++){
-      memcpy(cntrl_response_payload+offset, &fileStatArray[transferID].seq_num_array[i], sizeof(fileStatArray[transferID].seq_num_array[i]));
-      offset = offset + sizeof(fileStatArray[transferID].seq_num_array[i]);
+    for(int i=0; i < file_stat_index; i++){
+        memcpy(cntrl_response_payload + offset, &fileStatArray[transferID].seq_num_array[i], sizeof(fileStatArray[transferID].seq_num_array[i]));
+        offset = offset + sizeof(fileStatArray[transferID].seq_num_array[i]);
     }
 
-    cntrl_response_header = create_response_header(sock_index, 6, 0, payload_len);
     cntrl_response = (char*)malloc(CNTRL_RESP_HEADER_SIZE + payload_len);
 
     //copy header
@@ -170,7 +171,7 @@ void sendfile_stats_response(int sock_index, char* cntrl_payload){
     memcpy(cntrl_response + CNTRL_RESP_HEADER_SIZE, cntrl_response_payload, payload_len);
     free(cntrl_response_payload);
 
-    sendALL(sock_index, cntrl_response, CNTRL_RESP_HEADER_SIZE+payload_len);
+    sendALL(sock_index, cntrl_response, CNTRL_RESP_HEADER_SIZE + payload_len);
 
     free(cntrl_response);
     return;
@@ -178,7 +179,7 @@ void sendfile_stats_response(int sock_index, char* cntrl_payload){
 
 //0x07
 void last_data_packet_response(int sock_index){
-    if (ultimateDataPacket[0] == '\0'){
+    if (lastDataPacket[0] == '\0'){
         response(sock_index, 7, 0);
         return;
     }
@@ -186,11 +187,13 @@ void last_data_packet_response(int sock_index){
 
     cntrl_response_header = create_response_header(sock_index, 7, 0, DATA_PACKET_SIZE);
     cntrl_response = (char*)malloc(sizeof(char) * (CNTRL_RESP_HEADER_SIZE + DATA_PACKET_SIZE));
+
     //copy header
     memcpy(cntrl_response, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
     free(cntrl_response_header);
+
     //copy packet
-    memcpy(cntrl_response + CNTRL_RESP_HEADER_SIZE, ultimateDataPacket, DATA_PACKET_SIZE);
+    memcpy(cntrl_response + CNTRL_RESP_HEADER_SIZE, lastDataPacket, DATA_PACKET_SIZE);
     sendALL(sock_index, cntrl_response, CNTRL_RESP_HEADER_SIZE + DATA_PACKET_SIZE);
     free(cntrl_response);
 
@@ -207,9 +210,11 @@ void penultimate_data_packet_response(int sock_index){
 
     cntrl_response_header = create_response_header(sock_index, 7, 0, DATA_PACKET_SIZE);
     cntrl_response = (char*)malloc(sizeof(char) * (CNTRL_RESP_HEADER_SIZE + DATA_PACKET_SIZE));
+
     //copy header
     memcpy(cntrl_response, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
     free(cntrl_response_header);
+
     //copy packet
     memcpy(cntrl_response + CNTRL_RESP_HEADER_SIZE, penultimateDataPacket, DATA_PACKET_SIZE);
     sendALL(sock_index, cntrl_response, CNTRL_RESP_HEADER_SIZE + DATA_PACKET_SIZE);

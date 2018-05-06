@@ -44,8 +44,8 @@ struct fileStatus{
   	FILE *fptr;
 };
 
-char ultimateDataPacket[DATA_PACKET_SIZE];
 char penultimateDataPacket[DATA_PACKET_SIZE];
+char lastDataPacket[DATA_PACKET_SIZE];
 struct fileStatus fileStatArray[512]; // hashmap for transfer id
 
 void create_data_socket(uint16_t dataPort);
