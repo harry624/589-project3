@@ -18,13 +18,13 @@ int fdmax;				// maximum file descriptor number
 int timerStart;
 int timerEnd;
 
-struct timerNode{
-	int timerNodeIndex;
-	struct timeval time;
-	int isUpdatedEarly;
+struct timer{
+		int timerNodeIndex;
+		struct timeval time;
+		int isUpdatedEarly;
 };
 
-struct timerNode timerArr[5];
+struct timer timerArray[5];
 
 
 int control_socket, router_socket, data_socket;

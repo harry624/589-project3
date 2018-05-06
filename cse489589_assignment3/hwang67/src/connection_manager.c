@@ -87,6 +87,8 @@
                          //add to master fd
                          FD_SET(fdaccpet, &master);
                          if(fdaccpet > fdmax) fdmax = fdaccpet;
+
+                         handle_data(fdaccpet);
                       }
                      //existing socket
                      else{

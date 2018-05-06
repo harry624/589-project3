@@ -54,7 +54,31 @@ struct DataConn
 
  LIST_HEAD(DataConnsHead, DataConn) data_conn_list;
 
+//
+int createSocketToNextRouter(uint32_t destIp, uint16_t dataPort){
+    int sock;
+    struct sockaddr_in data_addr;
+    socklen_t addrlen = sizeof(data_addr);
 
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if(sock < 0){
+      perror("server: socket");
+      return -1;
+    }
+    bzero(&data_addr, sizeof(data_addr));
+
+    data_addr.sin_family = AF_INET;
+    data_addr.sin_addr.s_addr = htonl(destIp);
+    data_addr.sin_port = htons(dataPort);
+
+    if(connect(sock, (struct sockaddr*)&data_addr, sizeof data_addr) == -1){
+        perror("connect failed");
+        return -1;
+    }
+    return sock;
+}
+
+//listener
  void create_data_socket(uint16_t dataPort) {
      printf("create_data_socket\n");
      int sock;
@@ -104,39 +128,200 @@ struct DataConn
  }
 
 //0x05 send file
-int findNextHop(uint32_t destIP) {
+char* get_File_Name(uint16_t transfer_id){
+
+    // number of digits
+    int num;
+	if(transfer_id > 100){
+		num = 3;
+	}else if(transfer_id > 10){
+		num = 2;
+	}else{
+		num = 1;
+	}
+
+    // 5 for 'file-' and one for null
+    char* file_name = (char*)malloc(6+sizeof(char)*num);
+    strcpy(file_name, "file-");
+    sprintf(file_name+5, "%d", transfer_id);
+    file_name[strlen(file_name)] = '\0';
+    // return file_name;
+    return file_name;
+
+}
+
+uint16_t findNextHop(uint32_t destIP) {
     int destationID;
     for(int i = 0; i < num_neighbors; i++){
       if (destIP == routers[i].int32_ip){
-          destationID = routers[i].routerID;
-          break;
+          return routers[i].nextHopID;
       }
     }
-    return 0;
+    return -1;
 }
 
-int sending_file(uint32_t destIP, uint8_t transferID, uint8_t TTL, uint16_t seq_num, int isLast, char* file) {
+int sending_file(uint32_t destIP, uint8_t transferID, uint8_t TTL, uint16_t seq_num, int finbit, char* file) {
+    //find next hop
     uint16_t next_hop_id;
     int next_hop_index = -1;
-    next_hop_index = findNextHop(destIP);
-    if (next_hop_index == -1){
-      return -1;
+    next_hop_id = findNextHop(destIP);
+
+    for (int i = 0; i < num_neighbors; i++){
+        if(next_hop_id == routers[i].routerID){
+            next_hop_index = i;
+        }
     }
 
-    char *file_packet_header;
-    file_packet_header = (char *) malloc(DATA_PACKET_HEADER_SIZE);
+    if (next_hop_id == -1){
+        return -1;
+    }
 
-    struct DATA_PACKET_HEADER *packet_header;
+    //pack sending packet
+    char *file_packet;
+    file_packet = (char *) malloc(DATA_PACKET_SIZE);
+    uint16_t FIN     = 0x00;
+    uint16_t padding = 0x00;
+    destIP = htonl(destIP);
+    seq_num = htons(seq_num);
 
-    packet_header = (struct DATA_PACKET_HEADER *) (file_packet_header);
+    memcpy(file_packet, &destIP, sizeof(destIP));
+    memcpy(file_packet + 4, &transferID, sizeof(transferID));
+    memcpy(file_packet + 5, &TTL, sizeof(TTL));
+    memcpy(file_packet + 6, &seq_num, sizeof(seq_num));
 
-    packet_header->destationIP = htonl(destIP);
-    packet_header->transferID = transferID;
-    packet_header->TTL = TTL;
-    packet_header->seq_num = htons(seq_num);
-    packet_header->padding = htons(0);
+    if (finbit == 1){
+        FIN = htons(1);
+    }else{
+        FIN = htons(0);
+    }
+    memcpy(file_packet + 8, &FIN, sizeof(FIN));
+  	memcpy(file_packet + 9, &padding, sizeof(padding));
+  	memcpy(file_packet + 12, file, 1024);
 
-    return 1;
+    //save the penultimateDataPacket and ultimateDataPacket
+    memcpy(penultimateDataPacket, ultimateDataPacket, DATA_PACKET_SIZE);
+  	memcpy(ultimateDataPacket, file_packet, DATA_PACKET_SIZE);
+    //check if it is the first router
+    if(fileStatArray[transferID].transfer_id != transferID){
+      	fileStatArray[transferID].first_seq_num = ntohs(seq_num);
+      	printf("first seq num: %d\n", ntohs(seq_num));
+      	fileStatArray[transferID].ttl = TTL;
+      	fileStatArray[transferID].transfer_id = transferID;
+      	fileStatArray[transferID].index = 0;
+      }
+
+      // insert sequence number
+      fileStatArray[transferID].seq_num_array[fileStatArray[transferID].index++] = seq_num;
+
+      int data_Sock = routers[next_hop_index].data_socket_fd;
+      if(data_Sock == 0){
+        	data_Sock = createSocketToNextRouter(routers[next_hop_index].int32_ip, routers[next_hop_index].dataPort);
+        	routers[next_hop_index].data_socket_fd = data_Sock;
+      }
+
+      if (data_Sock > 0){
+        sendALL(data_Sock, file_packet, DATA_PACKET_SIZE);
+      }
+      if(finbit == 1){
+          //close the socket
+          close(data_Sock);
+          printf("closed\n");
+          routers[next_hop_index].data_socket_fd = 0;
+      }
+
+      printf("free payload\n");
+      free(file_packet);
+      return 1;
+}
+
+void handle_data(int sock_index){
+    char file_data[1024];
+    char* file_packet = (char *) malloc(sizeof(char)*DATA_PACKET_SIZE);
+    bzero(file_packet, DATA_PACKET_SIZE);
+
+    //receive packet
+    if(recvALL(sock_index, file_packet, DATA_PACKET_SIZE) < 0){
+        close(sock_index);
+        FD_CLR(sock_index, &master);
+    }
+
+    uint32_t dest_ip;
+    uint8_t transfer_id;
+    uint8_t ttl;
+    uint16_t seq_num;
+    uint16_t FIN;
+    int finbit = 0;
+
+    struct DATA_PACKET *packet = (struct DATA_PACKET *) file_packet;
+
+    dest_ip     = ntohl(packet->dest_ip);
+    transfer_id = packet->transfer_id;
+    ttl         = packet->ttl;
+    seq_num     = ntohs(packet->seq_no);
+    FIN         = ntohs(packet->FIN);
+    memcpy(packet + 12, file_data, 1024);
+
+    ttl = ttl-1;
+
+    if (FIN == 1){
+      finbit = 1;
+    }
+    if (ttl > 0){
+        //check if it is the destination
+        if (routers[localRouterIndex].int32_ip != dest_ip){
+            //send file to another router
+            sending_file(dest_ip, transfer_id, ttl, seq_num, finbit, file_data);
+        }else{
+            //it is the destination, save file
+            char* file_name = get_File_Name(transfer_id);
+
+            if(fileStatArray[transfer_id].transfer_id != transfer_id){
+                  fileStatArray[transfer_id].fptr = fopen(file_name, "wb");
+            }
+
+            printf("byteswritten:%d\n",fwrite(file_data, 1, 1024, fileStatArray[transfer_id].fptr));
+
+                // this is the first packet
+            if(fileStatArray[transfer_id].first_seq_num == 0){
+                  printf("receiving file:\n");
+                  fileStatArray[transfer_id].first_seq_num = seq_num;
+                  fileStatArray[transfer_id].ttl = ttl;
+                  fileStatArray[transfer_id].transfer_id = transfer_id;
+                  fileStatArray[transfer_id].index = 0;
+            }
+
+            // insert sequence number
+            fileStatArray[transfer_id].seq_num_array[fileStatArray[transfer_id].index++] = htons(seq_num);
+
+            if(finbit == 1){
+                //fileStatArray[transfer_id].last_seq_num = seq_num;
+                fclose(fileStatArray[transfer_id].fptr);
+                fileStatArray[transfer_id].fptr = NULL;
+            }
+
+            //save penultimateDataPacket
+            memcpy(penultimateDataPacket, ultimateDataPacket, DATA_PACKET_SIZE);
+
+            //save ultimateDataPacket
+            dest_ip = htonl(dest_ip);
+            seq_num = htons(seq_num);
+            uint16_t FIN = htons(FIN);
+            uint16_t padding = 0x00;
+
+            memcpy(ultimateDataPacket, &dest_ip, sizeof(dest_ip));
+            memcpy(ultimateDataPacket + 4, &transfer_id, sizeof(transfer_id));
+            memcpy(ultimateDataPacket + 5, &ttl, sizeof(ttl));
+            memcpy(ultimateDataPacket + 6, &seq_num, sizeof(seq_num));
+            memcpy(ultimateDataPacket + 8, &FIN, sizeof(FIN));
+            memcpy(ultimateDataPacket + 9, &padding, sizeof(padding));
+            memcpy(ultimateDataPacket + 12, file_data, 1024);
+        }
+    }
+
+    if(finbit == 1){
+        FD_CLR(sock_index, &master);
+        close(sock_index);
+    }
 }
 
 void send_file(int sock_index, char * cntrl_payload, uint16_t payload_len){
@@ -145,36 +330,40 @@ void send_file(int sock_index, char * cntrl_payload, uint16_t payload_len){
     uint8_t transferID;
     uint16_t seq_num;
 
-    char *filename;
     char destIP[40];
 
     struct SEND_FILE_CONTROL *send_file = (struct SEND_FILE_CONTROL *) cntrl_payload;
     tempdestIp = ntohl(send_file->destationIP);
     sprintf(destIP, "%d.%d.%d.%d", ((tempdestIp>>24)&((1<<8)-1)), ((tempdestIp>>16)&((1<<8)-1)), ((tempdestIp>>8)&((1<<8)-1)), (tempdestIp&((1<<8)-1)));
 
-    init_TTL = ntohs(send_file->init_TTL);
-    transferID = ntohs(send_file->transferID);
+    init_TTL    = send_file->init_TTL;
+    transferID = send_file->transferID;
     seq_num = ntohs(send_file->init_seq_num);
 
+
     //get filename
+    char *filename;
     int file_name_len = payload_len - 8 + 1;
     filename = (char*)malloc(file_name_len); // for remaining size, 1 for null terminator
     memset(filename, 0, file_name_len);
     strncpy(filename, cntrl_payload+8, file_name_len-1);
     filename[file_name_len] = '\0';
 
+    printf("destIp: %s, ttl: %d, transferID: %d, seq_num: %d, file_name: %s\n", destIP, init_TTL, transferID, seq_num, filename);
+
     if(init_TTL <= 0){
-  		return;
+  		  return;
   	}
 
     //read binary file into data
     int file_len = 0;
-  	int loop = 0;
+  	int totalPacketsToBeSent = 0;
 
     FILE *file_pointer;
     char file_buffer[1024];
-    // https://www.linuxquestions.org/questions/programming-9/c-howto-read-binary-file-into-buffer-172985/
+
     file_pointer = fopen(filename, "rb");
+
     if(file_pointer == NULL){
         return;
     }
@@ -182,19 +371,23 @@ void send_file(int sock_index, char * cntrl_payload, uint16_t payload_len){
     fseek(file_pointer, 0, SEEK_END);
   	file_len = ftell(file_pointer);
   	fseek(file_pointer, 0, SEEK_SET);
-  	loop = file_len/1024;
+  	totalPacketsToBeSent = file_len / 1024;
 
-  	int isLast = 0;
+  	int finbit = 0;
     int file_stat = 0;
 
-  	for(int i=0; i<loop; i++){
-    		if(i == loop-1){
-      			// ultimate
-      			isLast = 1;
+  	for(int i=0; i < totalPacketsToBeSent; i++){
+    		if(i == totalPacketsToBeSent - 1){
+      			// the last packet
+      			finbit = 1;
   		  }
+
     		fseek(file_pointer, 0, SEEK_CUR);
+
     		printf("bytesread:%d\n",fread(file_buffer, 1, 1024, file_pointer));
-        file_stat = sending_file(tempdestIp, transferID, init_TTL, seq_num, isLast, file_buffer);
+
+        file_stat = sending_file(tempdestIp, transferID, init_TTL, seq_num, finbit, file_buffer);
+
         if(file_stat == -1){
             fclose(file_pointer);
             return;

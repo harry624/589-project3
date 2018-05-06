@@ -23,6 +23,7 @@ struct Router
 
     char ipAddress[40];
     int firstupdateReceived;
+    int data_socket_fd;
     int missedcnt;
     int rTable_index;
     int counter;

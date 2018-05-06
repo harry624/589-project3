@@ -138,23 +138,23 @@ void updateDVBybellmanFord() {
         }
     }while(count != 0);
 
-    for (int i = 0; i < num_neighbors; i++){
-        for (int j = 0; j < num_neighbors; j++){
-            if(i == localRouterIndex){
-              printf("%d, next hopid: %d\t", distanceVector[i][j], routers[j].nextHopID);
-
-            }else{
-              printf("%d\t", distanceVector[i][j]);
-            }
-        }
-        printf("\n");
-    }
+    // for (int i = 0; i < num_neighbors; i++){
+    //     for (int j = 0; j < num_neighbors; j++){
+    //         if(i == localRouterIndex){
+    //           printf("%d, next hopid: %d\t", distanceVector[i][j], routers[j].nextHopID);
+    //
+    //         }else{
+    //           printf("%d\t", distanceVector[i][j]);
+    //         }
+    //     }
+    //     printf("\n");
+    // }
 
     return;
 }
 
 int recv_update_distanceVector(int sockfd) {
-        printf("recv_update_distanceVector\n");
+        // printf("recv_update_distanceVector\n");
         char *routing_header, *routing_payload;
         char *routing_update;
         uint16_t num_fields;
@@ -186,7 +186,7 @@ int recv_update_distanceVector(int sockfd) {
            perror("receive broadcast failed");
            return -1;
         }
-        printf("received :%d\n", res);
+        // printf("received :%d\n", res);
 
         if (res < 8){
           return -1;
@@ -210,9 +210,9 @@ int recv_update_distanceVector(int sockfd) {
                  break;
               }
         }
-
-        printf("num_fields: %d, sourceRouter_port: %d, sourceIP: %s, r_table_index: %d\n",
-                  num_fields, source_router_port, sourceIp, sourceRouterIndex);
+        //
+        // printf("num_fields: %d, sourceRouter_port: %d, sourceIP: %s, r_table_index: %d\n",
+        //           num_fields, source_router_port, sourceIp, sourceRouterIndex);
 
         //udpate routing table row of source router ID
         int routerIndex = 0;
@@ -251,7 +251,7 @@ int recv_update_distanceVector(int sockfd) {
                 continue;
             }
 
-            printf("update routing table index: %d, not neighbors\n", i);
+            // printf("update routing table index: %d, not neighbors\n", i);
             for (int j = 0; j < num_neighbors; j++){
                 if (distanceVector[j][i] < INF){
                     distanceVector[i][j] = distanceVector[j][i];
