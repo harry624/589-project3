@@ -125,6 +125,7 @@ void crash_response(int sock_index){
 
 //0x05
 void sendfile_response(int sock_index){
+    printf("sendfile_response\n");
     response(sock_index, 5, 0);
 }
 

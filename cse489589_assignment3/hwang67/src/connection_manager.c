@@ -103,7 +103,7 @@
                           }
                           else{
                             //unknown socket
-                            perror("known socket");
+                            perror("uknown socket");
                           }
                      }
                  }

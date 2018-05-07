@@ -198,7 +198,11 @@ void init_table(char *cntrl_payload) {
     // printf("router port:%d\n", routers[localRouterIndex].routerPort);
     create_router_socket(routers[localRouterIndex].routerPort);
     create_data_socket(routers[localRouterIndex].dataPort);
-    //
+
+    //init the last packet and penultimate packet
+    penultimateDataPacket[0] = '\0';
+    lastDataPacket[0] = '\0';
+
     return;
 }
 
@@ -376,7 +380,6 @@ int control_recv_hook(int sock_index){
 
         //SENDFILE [Control Code: 0x05]
         case 5:
-                sendfile_response(sock_index);
                 send_file(sock_index, cntrl_payload, payload_len);
                 break;
 

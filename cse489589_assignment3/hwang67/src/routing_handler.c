@@ -63,44 +63,44 @@ void create_router_socket(uint16_t routerPort) {
 
  //create UDP socket
 int create_UDP_listener_socket(uint16_t router_port){
-   struct addrinfo hints, *res;
-   int sockfd;
-   struct sockaddr_in router_addr;
-   socklen_t addr_len;
+     struct addrinfo hints, *res;
+     int sockfd;
+     struct sockaddr_in router_addr;
+     socklen_t addr_len;
 
-   memset(&hints, 0, sizeof hints);
-   hints.ai_family = AF_UNSPEC;
-   hints.ai_socktype = SOCK_DGRAM;
+     memset(&hints, 0, sizeof hints);
+     hints.ai_family = AF_UNSPEC;
+     hints.ai_socktype = SOCK_DGRAM;
 
-   // make a socket;
-   if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1){
-       perror("fail to create socket");
-   }
-   /* Make socket re-usable */
-   if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0){
-       perror("setsockopt");
-       exit(1);
-   }
+     // make a socket;
+     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1){
+         perror("fail to create socket");
+     }
+     /* Make socket re-usable */
+     if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0){
+         perror("setsockopt");
+         exit(1);
+     }
 
-   if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, (int[]){1}, sizeof(int)) < 0){
-       perror("setsockopt");
-       exit(1);
-   }
+     if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, (int[]){1}, sizeof(int)) < 0){
+         perror("setsockopt");
+         exit(1);
+     }
 
-   bzero(&router_addr, sizeof(router_addr));
+     bzero(&router_addr, sizeof(router_addr));
 
-   router_addr.sin_family = AF_INET;
-   router_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-   router_addr.sin_port = htons(router_port);
+     router_addr.sin_family = AF_INET;
+     router_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+     router_addr.sin_port = htons(router_port);
 
-   if(bind(sockfd, (struct sockaddr *)&router_addr, sizeof(router_addr)) < 0){
-       perror("server: bind");
-       exit(1);
-   }
+     if(bind(sockfd, (struct sockaddr *)&router_addr, sizeof(router_addr)) < 0){
+         perror("server: bind");
+         exit(1);
+     }
 
-   printf("listener: waiting to recvfrom... port: %d\n", router_port);
+     printf("listener: waiting to recvfrom... port: %d\n", router_port);
 
-   return sockfd;
+     return sockfd;
 }
 
 //receive UDP broadcast

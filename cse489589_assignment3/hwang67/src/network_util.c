@@ -96,5 +96,7 @@ ssize_t sendALL(int sock_index, char *buffer, ssize_t nbytes)
     while(bytes != nbytes)
         bytes += send(sock_index, buffer+bytes, nbytes-bytes, 0);
 
+
+    printf("sent bytes: %d\n", bytes);
     return bytes;
 }
