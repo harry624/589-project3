@@ -199,6 +199,11 @@ void init_table(char *cntrl_payload) {
     create_router_socket(routers[localRouterIndex].routerPort);
     create_data_socket(routers[localRouterIndex].dataPort);
 
+    //init timer:
+    for (int i = 0; i < num_neighbors; i++){
+        timerArray[i] = 0;
+    }
+
     //init the last packet and penultimate packet
     penultimateDataPacket[0] = '\0';
     lastDataPacket[0] = '\0';

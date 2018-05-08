@@ -1,6 +1,7 @@
 #ifndef ROUTING_HANDLER_H_
 #define ROUTING_HANDLER_H_
 
+#include <time.h>
 #include "../include/control_handler.h"
 
 #define ROUTING_HEADER_SIZE 8

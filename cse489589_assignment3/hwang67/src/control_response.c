@@ -209,7 +209,7 @@ void penultimate_data_packet_response(int sock_index){
     }
     char *cntrl_response_header, *cntrl_response;
 
-    cntrl_response_header = create_response_header(sock_index, 7, 0, DATA_PACKET_SIZE);
+    cntrl_response_header = create_response_header(sock_index, 8, 0, DATA_PACKET_SIZE);
     cntrl_response = (char*)malloc(sizeof(char) * (CNTRL_RESP_HEADER_SIZE + DATA_PACKET_SIZE));
 
     //copy header

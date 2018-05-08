@@ -57,7 +57,7 @@ int isData(int sock_index);
 
 int data_recv_hook(int sock_index);
 
-void handle_data(int sock_index);
+int handle_data(int sock_index);
 
 void send_file(int sock_index, char * cntrl_payload, uint16_t payload_len);
 

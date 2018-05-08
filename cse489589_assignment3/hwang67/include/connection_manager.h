@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <time.h>
 
 //init select
 fd_set master;		// master file descriptor list
@@ -24,8 +25,8 @@ struct timer{
 		int isUpdatedEarly;
 };
 
-struct timer timerArray[5];
-
+// struct timer timerArray[5];
+int timerArray[5];
 
 int control_socket, router_socket, data_socket;
 

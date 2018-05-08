@@ -97,7 +97,10 @@
                               if(!res) FD_CLR(i, &master);
                           }
                           else if(isData(i)){
-                              if(!data_recv_hook(i)){
+                              // if(!data_recv_hook(i)){
+                              //     FD_CLR(i, &master);
+                              // }
+                              if(!handle_data(i)){
                                   FD_CLR(i, &master);
                               }
                           }
@@ -112,23 +115,33 @@
              tv.tv_sec = boardcast_interval;
              tv.tv_usec = 0;
 
-             //add missed count;
-             // for (int i = 0; i < num_neighbors && neighbors[i] == 1; i++){
-             //    if (routers[i].firstupdateReceived == 1){
-             //        routers[i].missedcnt++;
-             //    }
-             // }
+             // add missed count;
+             for (int i = 0; i < num_neighbors; i++){
+                if (neighbors[i] == 1 && routers[i].firstupdateReceived == 1 && routers[i].isRemoved == 0){
+                    int timenow = time(0);
+                    int diff = timerArray[i] - timenow;
+                    printf("diff time between %d and %d is %d\n", localRouterIndex, i, diff);
+                    if(diff < 3 * boardcast_interval){
+                      routers[i].missedcnt++;
+                      printf("time now: %d, timeouttime: %d, gap: %d, router index: %d missed count %d\n",
+                                timenow, timerArray[i], diff, i, routers[i].missedcnt++);
 
-             // int count = 0;
-             //check if missed count > 3 time period
-             // for (int i = 0; i < num_neighbors && neighbors[i] == 1; i++){
-             //    if (routers[i].missedcnt >= 3 * boardcast_interval){
-             //        // count++;
-             //        distanceVector[localRouterIndex - 1][i] = INF;
-             //        routers[i].cost = INF;
-             //        routers[i].isRemoved = 1;
-             //    }
-             // }
+                    }
+                }
+             }
+
+             int count = 0;
+             // check if missed count > 3 time period
+             for (int i = 0; i < num_neighbors; i++){
+                if (neighbors[i] == 1 && routers[i].missedcnt >= 3 && routers[i].isRemoved == 0){
+                    printf("lost connection between local: %d and neighbors: %d\n", localRouterIndex, i);
+                    // count++;
+                    distanceVector[localRouterIndex][i] = INF;
+                    routers[i].cost = INF;
+                    routers[i].nextHopID = INF;
+                    routers[i].isRemoved = 1;
+                }
+             }
 
              // updated_num_neighbors = updated_num_neighbors - count;
 
