@@ -120,11 +120,11 @@
                 if (neighbors[i] == 1 && routers[i].firstupdateReceived == 1 && routers[i].isRemoved == 0){
                     int timenow = time(0);
                     int diff = timerArray[i] - timenow;
-                    printf("diff time between %d and %d is %d\n", localRouterIndex, i, diff);
+                    // printf("diff time between %d and %d is %d\n", localRouterIndex, i, diff);
                     if(diff < 3 * boardcast_interval){
                       routers[i].missedcnt++;
-                      printf("time now: %d, timeouttime: %d, gap: %d, router index: %d missed count %d\n",
-                                timenow, timerArray[i], diff, i, routers[i].missedcnt++);
+                      // printf("time now: %d, timeouttime: %d, gap: %d, router index: %d missed count %d\n",
+                      //           timenow, timerArray[i], diff, i, routers[i].missedcnt++);
 
                     }
                 }
@@ -134,7 +134,7 @@
              // check if missed count > 3 time period
              for (int i = 0; i < num_neighbors; i++){
                 if (neighbors[i] == 1 && routers[i].missedcnt >= 3 && routers[i].isRemoved == 0){
-                    printf("lost connection between local: %d and neighbors: %d\n", localRouterIndex, i);
+                    // printf("lost connection between local: %d and neighbors: %d\n", localRouterIndex, i);
                     // count++;
                     distanceVector[localRouterIndex][i] = INF;
                     routers[i].cost = INF;

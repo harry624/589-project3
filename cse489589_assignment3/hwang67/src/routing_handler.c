@@ -209,7 +209,7 @@ int recv_update_distanceVector(int sockfd) {
                  routers[i].firstupdateReceived = 1;
                  // timer[i] = ;
                  timerArray[i] = time(0) + 3 * boardcast_interval;
-                 printf("update %d timeout time \n", i);
+                 // printf("update %d timeout time \n", i);
                  break;
               }
         }

@@ -180,21 +180,25 @@ uint16_t findNextHop(uint32_t destIP) {
 
 int sending_file(uint32_t destIP, uint8_t transferID, uint8_t TTL, uint16_t seq_num, int finbit, char* file) {
     //find next hop
-    uint16_t next_hop_id;
-    int next_hop_index =  INF;
-    next_hop_id = findNextHop(destIP);
+    uint16_t nexthop_id;
+    int nexthop_index =  -1;
+    nexthop_id = findNextHop(destIP);
 
     for (int i = 0; i < num_neighbors; i++){
-        if(next_hop_id == routers[i].routerID){
-            next_hop_index = i;
+        if(nexthop_id == routers[i].routerID){
+            nexthop_index = i;
+            break;
         }
     }
 
-    if (next_hop_id == INF){
+    if (nexthop_id == -1){
         return -1;
     }
 
     // //pack sending packet
+    char *test_packet;
+    test_packet = (char *) malloc(DATA_PACKET_SIZE);
+
     char *file_packet;
     file_packet = (char *) malloc(DATA_PACKET_SIZE);
     uint16_t FIN     = 0x00;
@@ -227,12 +231,13 @@ int sending_file(uint32_t destIP, uint8_t transferID, uint8_t TTL, uint16_t seq_
     }else{
         FIN = htons(FIN);
     }
+
     memcpy(file_packet + 0x08, &FIN, sizeof(FIN));
   	memcpy(file_packet + 0x09, &padding, sizeof(padding));
   	memcpy(file_packet + 0x0c, file, 1024);
 
 
-    // //save the penultimateDataPacket and lastDataPacket
+    //save the penultimateDataPacket and lastDataPacket
     memcpy(penultimateDataPacket, lastDataPacket, DATA_PACKET_SIZE);
   	memcpy(lastDataPacket, file_packet, DATA_PACKET_SIZE);
 
@@ -249,11 +254,12 @@ int sending_file(uint32_t destIP, uint8_t transferID, uint8_t TTL, uint16_t seq_
       fileStatArray[transferID].seq_num_array[fileStatArray[transferID].index++] = seq_num;
 
       //create forwarding socket
-      int data_Sock = routers[next_hop_index].data_socket_fd;
-      printf("creating data socket\n");
+      int data_Sock = routers[nexthop_index].data_socket_fd;
+
       if(data_Sock == 0){
-        	data_Sock = createSocketToNextRouter(routers[next_hop_index].ipAddress, routers[next_hop_index].dataPort);
-        	routers[next_hop_index].data_socket_fd = data_Sock;
+          printf("creating data socket\n");
+        	data_Sock = createSocketToNextRouter(routers[nexthop_index].ipAddress, routers[nexthop_index].dataPort);
+        	routers[nexthop_index].data_socket_fd = data_Sock;
           printf("forwarding data socket: %d\n", data_Sock);
       }
 
@@ -262,8 +268,9 @@ int sending_file(uint32_t destIP, uint8_t transferID, uint8_t TTL, uint16_t seq_
           //the bug is here, when sending packet, the controller get connection closed expectedly
           sendALL(data_Sock, file_packet, DATA_PACKET_SIZE);
 
+          printf("data_sock is %d, \n", data_Sock);
           printf("nextHopID is %d, index is %d, transferID: %d, TTL: %d, seq_num: %d, finbit: %d\n",
-                    next_hop_id, next_hop_index, transferID, TTL, ntohs(seq_num), finbit);
+                    nexthop_id, nexthop_index, transferID, TTL, ntohs(seq_num), finbit);
       }else{
           printf("cannot connect to destination");
           return -1;
@@ -273,7 +280,7 @@ int sending_file(uint32_t destIP, uint8_t transferID, uint8_t TTL, uint16_t seq_
           //close the socket
           close(data_Sock);
           printf("closed\n");
-          routers[next_hop_index].data_socket_fd = 0;
+          routers[nexthop_index].data_socket_fd = 0;
       }
 
       // printf("free payload\n");
@@ -327,8 +334,10 @@ void send_file(int sock_index, char * cntrl_payload, uint16_t payload_len){
         return;
     }
 
+    //get the length of the file
     fseek(file_pointer, 0, SEEK_END);
   	file_len = ftell(file_pointer);
+    //move the pointer to the header
   	fseek(file_pointer, 0, SEEK_SET);
   	totalPacketsToBeSent = file_len / 1024;
 
@@ -336,7 +345,7 @@ void send_file(int sock_index, char * cntrl_payload, uint16_t payload_len){
     int file_stat = 0;
     printf("totalPacketsToBeSent: %d\n", totalPacketsToBeSent);
 
-  	for(int i=0; i < totalPacketsToBeSent; i++){
+  	for(int i = 0; i < totalPacketsToBeSent; i++){
     		if(i == totalPacketsToBeSent - 1){
       			// the last packet
       			finbit = 1;
@@ -382,16 +391,20 @@ int handle_data(int sock_index){
         return 0;
     }
 
-    struct DATA_PACKET *packet = (struct DATA_PACKET *) file_packet;
+    printf("packet handled\n");
 
-    dest_ip     = ntohl(packet->dest_ip);
-    transfer_id = packet->transfer_id;
-    ttl         = packet->ttl;
-    seq_num     = ntohs(packet->seq_no);
-    FIN         = ntohs(packet->FIN);
-    // memcpy(&FIN, file_data + 0x08, sizeof(FIN));
-    memcpy(&file_data, packet + 0x12, 1024);
+    memcpy(&dest_ip,      file_packet,        sizeof(dest_ip));
+    memcpy(&transfer_id,  file_packet + 0x04, sizeof(transfer_id));
+    memcpy(&ttl,          file_packet + 0x05, sizeof(ttl));
+    memcpy(&seq_num,      file_packet + 0x06, sizeof(seq_num));
+    memcpy(&FIN,          file_packet + 0x08, sizeof(FIN));
+    memcpy(&file_data,    file_packet + 0x0c, 1024);
 
+    dest_ip = ntohl(dest_ip);
+    seq_num = ntohs(seq_num);
+    FIN = ntohs(FIN);
+
+    printf("packet handled\n");
     if (FIN == 0x8000){
       finbit = 1;
     }
@@ -406,7 +419,7 @@ int handle_data(int sock_index){
             sending_file(dest_ip, transfer_id, ttl, seq_num, finbit, file_data);
         }else{
             //it is the destination, save file
-            printf("current router is the dest,transfer_id: %d, ttl: %d, seq_num: %d, FIN: %d\n", transfer_id, ttl, seq_num, finbit);
+            // printf("current router is the dest,transfer_id: %d, ttl: %d, seq_num: %d, FIN: %d\n", transfer_id, ttl, seq_num, finbit);
 
             char* file_name = get_File_Name(transfer_id);
 
@@ -503,15 +516,4 @@ int new_data_conn(int sock_index) {
      int res = handle_data(sock_index);
 
      return res;
-     // char *data_header, *data_payload;
-     //
-     // /* Get data header */
-     // data_header = (char *) malloc(sizeof(char)*DATA_PACKET_HEADER_SIZE);
-     // bzero(data_header, DATA_PACKET_HEADER_SIZE);
-     //
-     // if(recvALL(sock_index, data_header, DATA_PACKET_HEADER_SIZE) < 0){
-     //     remove_data_conn(sock_index);
-     //     free(data_header);
-     //     return 0;
-     // }
  }
