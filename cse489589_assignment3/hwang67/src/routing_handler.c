@@ -126,7 +126,8 @@ void updateDVBybellmanFord() {
                         distanceVector[i][j] = distanceVector[i][k] + distanceVector[k][j];
                         count++;
                         if (i == localRouterIndex){
-                            routers[j].nextHopID = routers[k].routerID;
+                            // routers[j].nextHopID = routers[k].routerID;
+                            routers[j].nextHopID = routers[k].nextHopID;
                             routers[j].cost = distanceVector[i][j];
                         }
                     }
@@ -207,9 +208,11 @@ int recv_update_distanceVector(int sockfd) {
                  sourceRouterIndex = i;
                  routers[i].missedcnt = 0;
                  routers[i].firstupdateReceived = 1;
-                 // timer[i] = ;
-                 timerArray[i] = time(0) + 3 * boardcast_interval;
-                 // printf("update %d timeout time \n", i);
+                 // timerArray[i] = time(0) + 3 * boardcast_interval;
+                 //update the next timeout time
+                 timerArray[i] = time(0) + boardcast_interval;
+
+                 printf("update boardcast form %d\n", i);
                  break;
               }
         }

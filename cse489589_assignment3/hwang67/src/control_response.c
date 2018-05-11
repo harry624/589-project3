@@ -218,6 +218,8 @@ void penultimate_data_packet_response(int sock_index){
 
     //copy packet
     memcpy(cntrl_response + CNTRL_RESP_HEADER_SIZE, penultimateDataPacket, DATA_PACKET_SIZE);
+    // free(cntrl_response_header);
+
     sendALL(sock_index, cntrl_response, CNTRL_RESP_HEADER_SIZE + DATA_PACKET_SIZE);
     free(cntrl_response);
 

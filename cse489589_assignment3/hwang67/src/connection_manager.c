@@ -48,14 +48,35 @@
  void main_loop(/* arguments */) {
      int fdaccpet;
 
+     //init timer
      struct timeval tv;
      boardcast_interval = 5;
      tv.tv_sec = boardcast_interval;
      tv.tv_usec = 0;
+
+     int timeoutIndex = -1;
      while(1){
          read_fds = master; // copy it
 
+         //timer should be updated Here, check the find the earliest timeout
+         //find the earliest timeout time and index
+         int diff = INF;
+         for (int i = 0; i < num_neighbors; i++){
+            if (neighbors[i] == 1 && routers[i].firstupdateReceived == 1 && routers[i].isRemoved == 0){
+                int timenow = time(0);
+                if ((timerArray[i] - timenow) < diff){
+                    diff = timerArray[i] - timenow;
+                    timeoutIndex = i;
+                    tv.tv_sec = diff;
+                    printf("next timeout index is %d, remaining time is %d\n",i, diff);
+                }
+            }
+         }
+
+         //if find the earlist timer, update tv
+
          int res = select(fdmax+1, &read_fds, NULL, NULL, &tv);
+
          if (res == -1) {
              perror("select");
              exit(4);
@@ -116,21 +137,13 @@
              tv.tv_usec = 0;
 
              // add missed count;
-             for (int i = 0; i < num_neighbors; i++){
-                if (neighbors[i] == 1 && routers[i].firstupdateReceived == 1 && routers[i].isRemoved == 0){
-                    int timenow = time(0);
-                    int diff = timerArray[i] - timenow;
-                    // printf("diff time between %d and %d is %d\n", localRouterIndex, i, diff);
-                    if(diff < 3 * boardcast_interval){
-                      routers[i].missedcnt++;
-                      // printf("time now: %d, timeouttime: %d, gap: %d, router index: %d missed count %d\n",
-                      //           timenow, timerArray[i], diff, i, routers[i].missedcnt++);
+             if (timeoutIndex != -1){
+                routers[timeoutIndex].missedcnt++;
+                timerArray[timeoutIndex] = time(0) + boardcast_interval;
+                printf("index %d miss count: %d\n", timeoutIndex, routers[timeoutIndex].missedcnt);
 
-                    }
-                }
              }
 
-             int count = 0;
              // check if missed count > 3 time period
              for (int i = 0; i < num_neighbors; i++){
                 if (neighbors[i] == 1 && routers[i].missedcnt >= 3 && routers[i].isRemoved == 0){
@@ -154,20 +167,19 @@
  }
 
  void init() {
-   control_socket = create_control_socket();
+     control_socket = create_control_socket();
 
-   // printf("init socket created:%d\n", control_socket);
-   //router_socket and data_socket will be initialized after INIT from controller
+     //router_socket and data_socket will be initialized after INIT from controller
 
-   // clear the master and temp sets
-   FD_ZERO(&master);
-   FD_ZERO(&read_fds);
+     // clear the master and temp sets
+     FD_ZERO(&master);
+     FD_ZERO(&read_fds);
 
-   //Register the control socket
-   FD_SET(control_socket, &master);
+     //Register the control socket
+     FD_SET(control_socket, &master);
 
-   fdmax = control_socket;
+     fdmax = control_socket;
 
-   main_loop();
+     main_loop();
 
  }

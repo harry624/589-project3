@@ -186,7 +186,8 @@ int sending_file(uint32_t destIP, uint8_t transferID, uint8_t TTL, uint16_t seq_
 
     for (int i = 0; i < num_neighbors; i++){
         if(nexthop_id == routers[i].routerID){
-            nexthop_index = i;
+            // nexthop_index = i;
+            nexthop_index = routers[i].rTable_index;
             break;
         }
     }
